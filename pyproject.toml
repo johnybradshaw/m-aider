@@ -1,0 +1,42 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "maider"
+version = "0.1.0"
+description = "Multi-provider GPU vLLM deployment tool (m'aider - like aider, but with cloud VMs)"
+readme = "README.md"
+requires-python = ">=3.10"
+authors = [
+    {name = "Your Name"}
+]
+dependencies = [
+    "linode_api4>=5.9.0",
+    "click>=8.1.0",
+    "rich>=13.7.0",
+    "python-dotenv>=1.0.0",
+    "requests>=2.31.0",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0.0",
+    "black>=23.0.0",
+    "ruff>=0.1.0",
+]
+
+[project.scripts]
+maider = "maider.cli:main"
+coder = "maider.cli:main"  # Backward compatibility alias
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.black]
+line-length = 100
+target-version = ["py310"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"

@@ -1,3 +1,4 @@
+.aider*
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
@@ -136,6 +137,7 @@ celerybeat.pid
 
 # Environments
 .env
+.env.secrets
 .envrc
 .venv
 env/
@@ -190,6 +192,10 @@ cython_debug/
 
 # Ruff stuff:
 .ruff_cache/
+
+# Local artifacts
+.DS_Store
+pytest.log
 
 # PyPI configuration file
 .pypirc
