@@ -99,7 +99,8 @@ def _vllm_healthcheck() -> str:
         [
             "    healthcheck:",
             '      test: ["CMD-SHELL", "python -c \\"import urllib.request; '
-            "urllib.request.urlopen('http://localhost:8000/v1/models', timeout=2).read()\\""]",
+            "urllib.request.urlopen('http://localhost:8000/v1/models', timeout=2).read()\\"
+            "]",
             "      interval: 30s",
             "      timeout: 5s",
             "      retries: 6",
@@ -112,7 +113,8 @@ def _webui_healthcheck() -> str:
         [
             "    healthcheck:",
             '      test: ["CMD-SHELL", "python -c \\"import urllib.request; '
-            "urllib.request.urlopen('http://localhost:8080/', timeout=2).read()\\""]",
+            "urllib.request.urlopen('http://localhost:8080/', timeout=2).read()\\"
+            "]",
             "      interval: 30s",
             "      timeout: 5s",
             "      retries: 6",
@@ -155,7 +157,7 @@ def render_compose(runtime: ComposeRuntime) -> str:
                 "  openwebui:",
                 "    image: ${OPENWEBUI_IMAGE}",
                 "    ports:",
-                "      - \"127.0.0.1:${WEBUI_PORT}:8080\"",
+                '      - "127.0.0.1:${WEBUI_PORT}:8080"',
                 "    environment:",
                 "      - OPENAI_API_BASE_URL=http://vllm:8000/v1",
                 "      - OPENAI_API_KEY=sk-dummy",
@@ -174,25 +176,28 @@ def render_compose(runtime: ComposeRuntime) -> str:
     if volumes_section:
         volumes_block = "\n".join(["volumes:"] + volumes_section)
 
-    return "\n".join(
-        [
-            "version: \"3.8\"",
-            "",
-            "services:",
-            "  vllm:",
-            "    image: ${VLLM_IMAGE}",
-            "    ipc: host",
-            "    gpus: all",
-            "    ports:",
-            "      - \"127.0.0.1:${VLLM_PORT}:8000\"",
-            *vllm_env,
-            "    command: >",
-            f"      {_vllm_command(runtime)}",
-            "    restart: unless-stopped",
-            vllm_healthcheck,
-            *vllm_volumes,
-            "",
-            openwebui_service,
-            volumes_block,
-        ]
-    ).strip() + "\n"
+    return (
+        "\n".join(
+            [
+                'version: "3.8"',
+                "",
+                "services:",
+                "  vllm:",
+                "    image: ${VLLM_IMAGE}",
+                "    ipc: host",
+                "    gpus: all",
+                "    ports:",
+                '      - "127.0.0.1:${VLLM_PORT}:8000"',
+                *vllm_env,
+                "    command: >",
+                f"      {_vllm_command(runtime)}",
+                "    restart: unless-stopped",
+                vllm_healthcheck,
+                *vllm_volumes,
+                "",
+                openwebui_service,
+                volumes_block,
+            ]
+        ).strip()
+        + "\n"
+    )
