@@ -1,0 +1,46 @@
+"""Command modules for coder CLI."""
+
+# Make commands available for import
+from . import (
+    up,
+    down,
+    list_vms,
+    list_types,
+    status,
+    validate,
+    check,
+    validate_perf,
+    wizard,
+    use,
+    cleanup,
+    extend,
+    switch_model,
+    tunnel,
+    benchmark,
+    benchmark_collect,
+    benchmark_compare,
+    benchmark_status,
+    recommend,
+)
+
+__all__ = [
+    "up",
+    "down",
+    "list_vms",
+    "list_types",
+    "status",
+    "validate",
+    "check",
+    "validate_perf",
+    "wizard",
+    "use",
+    "cleanup",
+    "extend",
+    "switch_model",
+    "tunnel",
+    "benchmark",
+    "benchmark_collect",
+    "benchmark_compare",
+    "benchmark_status",
+    "recommend",
+]
