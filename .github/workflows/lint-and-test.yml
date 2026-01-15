@@ -1,0 +1,271 @@
+name: Lint and Test
+
+on:
+  push:
+    branches: [ main, claude/* ]
+  pull_request:
+    branches: [ main ]
+
+jobs:
+  python-lint:
+    name: Python Linting
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install flake8 black
+
+      - name: Run Black (code formatting check)
+        run: |
+          black --check src/ tests/
+          echo "✓ Code formatting is consistent"
+
+      - name: Run flake8 (style guide enforcement)
+        run: |
+          # Stop build if there are syntax errors or undefined names
+          flake8 src/ tests/ --count --select=E9,F63,F7,F82 --show-source --statistics
+          # Exit-zero treats all errors as warnings
+          flake8 src/ tests/ --count --exit-zero --max-complexity=10 --max-line-length=120 --statistics
+          echo "✓ Python linting passed"
+
+  python-test:
+    name: Python Tests
+    strategy:
+      matrix:
+        python-version: ['3.10', '3.11', '3.12', '3.13', '3.14']
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Set up Python ${{ matrix.python-version }}
+        uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+        with:
+          python-version: ${{ matrix.python-version }}
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+          pip install pytest pytest-cov pytest-mock
+
+      - name: Run pytest
+        run: |
+          pytest tests/ -v --cov=src/maider --cov-report=term-missing --cov-report=xml
+          echo "✓ All tests passed with Python ${{ matrix.python-version }}"
+          pytest --cov --junitxml=junit.xml -o junit_family=legacy
+          echo "✓ All tests analytics passed with Python ${{ matrix.python-version }}"
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+
+      - name: Upload test results to Codecov
+        if: ${{ !cancelled() }}
+        uses: codecov/codecov-action@671740ac38dd9b0130fbe1cec585b89eea48d3de # v5.5.2
+        with:
+          token: ${{ secrets.CODECOV_TOKEN }}
+          report_type: test_results
+
+  validate-config:
+    name: Validate Configuration Files
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Check .env.example has required fields
+        run: |
+          for field in REGION TYPE FIREWALL_ID MODEL_ID SERVED_MODEL_NAME; do
+            if ! grep -q "^${field}=" .env.example; then
+              echo "Error: .env.example missing required field: ${field}"
+              exit 1
+            fi
+            echo "✓ Found required field: ${field}"
+          done
+
+      - name: Check .env.secrets.example
+        run: |
+          if ! grep -q "HUGGING_FACE_HUB_TOKEN" .env.secrets.example; then
+            echo "Error: .env.secrets.example missing HUGGING_FACE_HUB_TOKEN"
+            exit 1
+          fi
+          echo "✓ .env.secrets.example is valid"
+
+  validate-docs:
+    name: Validate Documentation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Check required documentation files
+        run: |
+          for doc in README.md CLAUDE.MD .env.example .env.secrets.example; do
+            if [ ! -f "$doc" ]; then
+              echo "Error: Missing required file: $doc"
+              exit 1
+            fi
+            echo "✓ Found: $doc"
+          done
+
+      - name: Check docs/ directory structure
+        run: |
+          if [ ! -d "docs" ]; then
+            echo "Error: docs/ directory missing"
+            exit 1
+          fi
+
+          # Check for key documentation files
+          for doc in PYTHON-MIGRATION.md VALIDATION-GUIDE.md CLOUD-INIT-DESIGN.md; do
+            if [ ! -f "docs/$doc" ]; then
+              echo "Error: Missing docs/$doc"
+              exit 1
+            fi
+            echo "✓ Found: docs/$doc"
+          done
+
+      - name: Verify CLAUDE.MD update reminder is present
+        run: |
+          if ! grep -q "Always update CLAUDE.MD when making changes" CLAUDE.MD; then
+            echo "Error: CLAUDE.MD missing update reminder"
+            exit 1
+          fi
+          echo "✓ CLAUDE.MD has update reminder"
+
+      - name: Check README references Python CLI
+        run: |
+          if ! grep -q "coder wizard" README.md; then
+            echo "Error: README.md should reference Python CLI commands"
+            exit 1
+          fi
+          echo "✓ README.md references Python CLI"
+
+  security-checks:
+    name: Security Checks
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Verify .gitignore ignores secrets
+        run: |
+          if ! grep -q "^\.env\.secrets$" .gitignore; then
+            echo "Error: .gitignore does not ignore .env.secrets"
+            exit 1
+          fi
+          if ! grep -q "^\.aider\*$" .gitignore; then
+            echo "Error: .gitignore does not ignore .aider* files"
+            exit 1
+          fi
+          echo "✓ .gitignore properly configured"
+
+      - name: Check for accidentally committed secrets
+        run: |
+          # Check for common secret patterns (allow in test fixtures)
+          if grep -r "hf_[a-zA-Z0-9]\{30,\}" --exclude-dir=.git --exclude-dir=tests --exclude="*.md" .; then
+            echo "Error: Found potential HuggingFace token in files"
+            exit 1
+          fi
+
+          # Check for Linode tokens
+          if grep -r "linode_[a-zA-Z0-9]\{64\}" --exclude-dir=.git --exclude-dir=tests --exclude="*.md" .; then
+            echo "Error: Found potential Linode token in files"
+            exit 1
+          fi
+
+          echo "✓ No secrets found in repository"
+
+      - name: Check Python cache files not committed
+        run: |
+          if find . -name "__pycache__" -type d | grep -q .; then
+            echo "Error: __pycache__ directories found in repository"
+            exit 1
+          fi
+          if find . -name "*.pyc" -type f | grep -q .; then
+            echo "Error: .pyc files found in repository"
+            exit 1
+          fi
+          echo "✓ No Python cache files in repository"
+
+  validate-gpu-regions:
+    name: Validate GPU Region Configuration
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+        with:
+          python-version: '3.10'
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Check GPU_REGIONS consistency
+        run: |
+          # Extract GPU_REGIONS from both files
+          wizard_regions=$(python -c "from src.maider.commands.wizard import GPU_REGIONS; print(sorted(GPU_REGIONS))")
+          validate_regions=$(python -c "from src.maider.commands.validate import GPU_REGIONS; print(sorted(GPU_REGIONS))")
+
+          if [ "$wizard_regions" != "$validate_regions" ]; then
+            echo "Error: GPU_REGIONS mismatch between wizard.py and validate.py"
+            echo "Wizard: $wizard_regions"
+            echo "Validate: $validate_regions"
+            exit 1
+          fi
+
+          echo "✓ GPU_REGIONS consistent across modules"
+
+      - name: Verify GPU region count
+        run: |
+          region_count=$(python -c "from src.maider.commands.wizard import GPU_REGIONS; print(len(GPU_REGIONS))")
+
+          if [ "$region_count" -ne 12 ]; then
+            echo "Error: Expected 12 GPU regions, found $region_count"
+            exit 1
+          fi
+
+          echo "✓ GPU region count is correct (12 regions)"
+
+  cli-smoke-test:
+    name: CLI Smoke Test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@8e8c483db84b4bee98b60c0593521ed34d9990e8 # v6.0.1
+
+      - name: Set up Python
+        uses: actions/setup-python@83679a892e2d95755f2dac6acb0bfd1e9ac5d548 # v6.1.0
+        with:
+          python-version: '3.10'
+
+      - name: Install CLI
+        run: |
+          python -m pip install --upgrade pip
+          pip install -e .
+
+      - name: Test CLI help commands
+        run: |
+          coder --help | grep -q "Usage:" || exit 1
+          coder validate --help | grep -q "Validate configuration" || exit 1
+          coder wizard --help | grep -q "Interactive setup wizard" || exit 1
+          echo "✓ CLI help commands work"
+
+      - name: Test CLI version/info
+        run: |
+          coder --version || echo "Note: --version may not be implemented yet"
+          echo "✓ CLI installed successfully"
