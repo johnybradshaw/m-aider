@@ -8,6 +8,7 @@ from dataclasses import dataclass
 from rich.console import Console
 
 console = Console()
+SSH_CONNECT_TIMEOUT = "ConnectTimeout=5"
 
 
 @dataclass
@@ -142,7 +143,7 @@ class VLLMHealer:
                 [
                     "ssh",
                     "-o",
-                    "ConnectTimeout=5",
+                    SSH_CONNECT_TIMEOUT,
                     f"root@{self.ip}",
                     "nvidia-smi --query-gpu=count --format=csv,noheader | wc -l",
                 ],
@@ -189,7 +190,7 @@ class VLLMHealer:
                     cmd = [
                         "ssh",
                         "-o",
-                        "ConnectTimeout=5",
+                        SSH_CONNECT_TIMEOUT,
                         f"root@{self.ip}",
                         f"sed -i 's/^{key}=.*/{key}={value}/' /opt/llm/.env || echo '{key}={value}' >> /opt/llm/.env",
                     ]
@@ -199,7 +200,7 @@ class VLLMHealer:
             restart_cmd = [
                 "ssh",
                 "-o",
-                "ConnectTimeout=5",
+                SSH_CONNECT_TIMEOUT,
                 f"root@{self.ip}",
                 "cd /opt/llm && docker compose restart",
             ]
@@ -233,7 +234,7 @@ def check_and_heal_vllm(ip: str, session_dir: str, max_retries: int = 3) -> bool
                 [
                     "ssh",
                     "-o",
-                    "ConnectTimeout=5",
+                    SSH_CONNECT_TIMEOUT,
                     f"root@{ip}",
                     "docker logs --tail 200 $(docker ps -q | head -n1) 2>&1",
                 ],
@@ -262,7 +263,6 @@ def check_and_heal_vllm(ip: str, session_dir: str, max_retries: int = 3) -> bool
                 console.print("[dim]Waiting for container to restart...[/dim]")
                 time.sleep(30)
                 healer.retry_count = attempt + 1
-                continue
             else:
                 return False
         else:

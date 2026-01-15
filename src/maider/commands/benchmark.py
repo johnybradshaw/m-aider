@@ -308,7 +308,7 @@ def calculate_cost_per_1k_tokens(tokens_per_sec: float, hourly_cost: float) -> f
 
     # Cost per token = hourly_cost / tokens_per_hour
     # Cost per 1K tokens = (hourly_cost / tokens_per_hour) * 1000
-    cost_per_1k = (hourly_cost / tokens_per_hour) * 1000 if tokens_per_hour > 0 else 0.0
+    cost_per_1k = (hourly_cost / tokens_per_hour) * 1000
 
     return cost_per_1k
 
@@ -354,32 +354,77 @@ def cmd(session: Optional[str], output: str, category: str, save_to_db: bool):
     Results are saved to a JSON file and optionally to the centralized database.
     """
     session_mgr = SessionManager()
+    current_session = _get_session(session_mgr, session)
+    _print_session_header(current_session)
 
-    # Get session
-    if session:
-        current_session = session_mgr.get_session(session)
-        if not current_session:
-            console.print(f"[red]✗ Session '{session}' not found[/red]")
-            raise click.Abort()
-    else:
-        current_session = session_mgr.get_current_session()
-        if not current_session:
-            console.print("[red]✗ No current session set[/red]")
-            console.print("\nUse: maider use <session-name>")
-            raise click.Abort()
+    env_file = session_mgr.cache_dir / current_session.name / "aider-env"
+    api_base, model_name = _load_api_settings(env_file)
+    selected_tests = _select_tests(category)
 
+    console.print(f"[bold]Running benchmark tests ({category})...[/bold]\n")
+    results = _run_benchmark_tests(api_base, model_name, selected_tests)
+    successful_results = [r for r in results if r.get("success", False)]
+
+    if not successful_results:
+        console.print("[red]✗ All tests failed[/red]")
+        raise click.Abort()
+
+    summary, results_by_category = _aggregate_results(
+        successful_results,
+        selected_tests,
+        current_session.hourly_cost,
+    )
+    _print_summary(
+        summary,
+        current_session.hourly_cost,
+        len(successful_results),
+        len(selected_tests),
+        results_by_category,
+        category,
+    )
+
+    output_data = _build_output_data(
+        current_session,
+        category,
+        results_by_category,
+        summary,
+        results,
+    )
+    output_path = _write_results(output, output_data)
+    console.print(f"\n[green]✓ Results saved to: {output_path}[/green]")
+
+    if save_to_db:
+        _save_results_to_db(current_session, results_by_category, output_data, results)
+
+
+def _get_session(session_mgr: SessionManager, session_name: Optional[str]):
+    if session_name:
+        current_session = session_mgr.get_session(session_name)
+        if not current_session:
+            console.print(f"[red]✗ Session '{session_name}' not found[/red]")
+            raise click.Abort()
+        return current_session
+
+    current_session = session_mgr.get_current_session()
+    if not current_session:
+        console.print("[red]✗ No current session set[/red]")
+        console.print("\nUse: maider use <session-name>")
+        raise click.Abort()
+    return current_session
+
+
+def _print_session_header(current_session):
     console.print(f"\n[bold cyan]Benchmarking session: {current_session.name}[/bold cyan]\n")
     console.print(f"  Model: {current_session.model_id}")
     console.print(f"  Type: {current_session.type}")
     console.print(f"  Cost: ${current_session.hourly_cost}/hour\n")
 
-    # Get API base from environment file
-    env_file = session_mgr.cache_dir / current_session.name / "aider-env"
+
+def _load_api_settings(env_file: Path) -> tuple[str, str]:
     if not env_file.exists():
         console.print(f"[red]✗ Environment file not found: {env_file}[/red]")
         raise click.Abort()
 
-    # Parse aider-env for API settings
     api_base = None
     model_name = None
     for line in env_file.read_text().splitlines():
@@ -392,7 +437,10 @@ def cmd(session: Optional[str], output: str, category: str, save_to_db: bool):
         console.print("[red]✗ Could not determine API settings[/red]")
         raise click.Abort()
 
-    # Filter tests by category
+    return api_base, model_name
+
+
+def _select_tests(category: str):
     if category.lower() == "all":
         selected_tests = TEST_PROMPTS
     else:
@@ -402,8 +450,12 @@ def cmd(session: Optional[str], output: str, category: str, save_to_db: bool):
         console.print(f"[red]✗ No tests found for category: {category}[/red]")
         raise click.Abort()
 
-    console.print(f"[bold]Running benchmark tests ({category})...[/bold]\n")
+    return selected_tests
 
+
+def _run_benchmark_tests(
+    api_base: str, model_name: str, selected_tests: List[Dict[str, Any]]
+) -> List[Dict[str, Any]]:
     results: List[Dict[str, Any]] = []
 
     for i, test in enumerate(selected_tests, 1):
@@ -418,7 +470,6 @@ def cmd(session: Optional[str], output: str, category: str, save_to_db: bool):
                 f"  ✓ {result['completion_tokens']} tokens in {result['elapsed_time']:.2f}s"
             )
             console.print(f"  ➜ {result['tokens_per_sec']:.2f} tokens/sec\n")
-
             results.append(
                 {
                     "test_name": test["name"],
@@ -439,55 +490,77 @@ def cmd(session: Optional[str], output: str, category: str, save_to_db: bool):
                 }
             )
 
-    # Calculate aggregate metrics
-    successful_results = [r for r in results if r.get("success", False)]
+    return results
 
-    if not successful_results:
-        console.print("[red]✗ All tests failed[/red]")
-        raise click.Abort()
 
+def _aggregate_results(
+    successful_results: List[Dict[str, Any]],
+    selected_tests: List[Dict[str, Any]],
+    hourly_cost: float,
+) -> tuple[Dict[str, Any], Dict[str, Dict[str, Any]]]:
     avg_tokens_per_sec = sum(r["tokens_per_sec"] for r in successful_results) / len(
         successful_results
     )
     total_time = sum(r["elapsed_time"] for r in successful_results)
     total_tokens = sum(r["completion_tokens"] for r in successful_results)
-    cost_per_1k = calculate_cost_per_1k_tokens(avg_tokens_per_sec, current_session.hourly_cost)
+    cost_per_1k = calculate_cost_per_1k_tokens(avg_tokens_per_sec, hourly_cost)
 
-    # Calculate results by category
+    results_by_category = _build_results_by_category(successful_results, hourly_cost)
+
+    summary = {
+        "avg_tokens_per_sec": avg_tokens_per_sec,
+        "total_time": total_time,
+        "total_tokens": total_tokens,
+        "cost_per_1k_tokens": cost_per_1k,
+        "tests_passed": len(successful_results),
+        "tests_total": len(selected_tests),
+    }
+
+    return summary, results_by_category
+
+
+def _build_results_by_category(
+    successful_results: List[Dict[str, Any]], hourly_cost: float
+) -> Dict[str, Dict[str, Any]]:
     results_by_category: Dict[str, Dict[str, Any]] = {}
     for cat in ["coding", "context_heavy", "reasoning"]:
         cat_results = [r for r in successful_results if r.get("category") == cat]
-        if cat_results:
-            cat_avg_tps = sum(r["tokens_per_sec"] for r in cat_results) / len(cat_results)
-            cat_total_time = sum(r["elapsed_time"] for r in cat_results)
-            cat_total_tokens = sum(r["completion_tokens"] for r in cat_results)
-            results_by_category[cat] = {
-                "avg_tokens_per_sec": cat_avg_tps,
-                "total_time": cat_total_time,
-                "total_tokens": cat_total_tokens,
-                "cost_per_1k_tokens": calculate_cost_per_1k_tokens(
-                    cat_avg_tps, current_session.hourly_cost
-                ),
-                "tests_passed": len(cat_results),
-            }
+        if not cat_results:
+            continue
+        cat_avg_tps = sum(r["tokens_per_sec"] for r in cat_results) / len(cat_results)
+        results_by_category[cat] = {
+            "avg_tokens_per_sec": cat_avg_tps,
+            "total_time": sum(r["elapsed_time"] for r in cat_results),
+            "total_tokens": sum(r["completion_tokens"] for r in cat_results),
+            "cost_per_1k_tokens": calculate_cost_per_1k_tokens(cat_avg_tps, hourly_cost),
+            "tests_passed": len(cat_results),
+        }
+    return results_by_category
 
-    # Display summary table
+
+def _print_summary(
+    summary: Dict[str, Any],
+    hourly_cost: float,
+    successful_count: int,
+    total_count: int,
+    results_by_category: Dict[str, Dict[str, Any]],
+    category: str,
+) -> None:
     console.print("\n[bold]Benchmark Results[/bold]\n")
 
     table = Table(show_header=True)
     table.add_column("Metric", style="cyan")
     table.add_column("Value", style="green")
 
-    table.add_row("Average throughput", f"{avg_tokens_per_sec:.2f} tokens/sec")
-    table.add_row("Total generation time", f"{total_time:.2f} seconds")
-    table.add_row("Total tokens generated", f"{total_tokens}")
-    table.add_row("Hourly cost", f"${current_session.hourly_cost:.2f}/hour")
-    table.add_row("Cost per 1K tokens", f"${cost_per_1k:.4f}")
-    table.add_row("Tests passed", f"{len(successful_results)}/{len(selected_tests)}")
+    table.add_row("Average throughput", f"{summary['avg_tokens_per_sec']:.2f} tokens/sec")
+    table.add_row("Total generation time", f"{summary['total_time']:.2f} seconds")
+    table.add_row("Total tokens generated", f"{summary['total_tokens']}")
+    table.add_row("Hourly cost", f"${hourly_cost:.2f}/hour")
+    table.add_row("Cost per 1K tokens", f"${summary['cost_per_1k_tokens']:.4f}")
+    table.add_row("Tests passed", f"{successful_count}/{total_count}")
 
     console.print(table)
 
-    # Display category breakdown if running all tests
     if category.lower() == "all" and results_by_category:
         console.print("\n[bold]Results by Category:[/bold]\n")
         for cat, cat_data in results_by_category.items():
@@ -497,8 +570,15 @@ def cmd(session: Optional[str], output: str, category: str, save_to_db: bool):
                 f"(${cat_data['cost_per_1k_tokens']:.4f}/1K tokens)"
             )
 
-    # Save results to JSON file
-    output_data = {
+
+def _build_output_data(
+    current_session,
+    category: str,
+    results_by_category: Dict[str, Dict[str, Any]],
+    summary: Dict[str, Any],
+    results: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    return {
         "timestamp": datetime.now().isoformat(),
         "session": current_session.name,
         "model": current_session.model_id,
@@ -506,60 +586,53 @@ def cmd(session: Optional[str], output: str, category: str, save_to_db: bool):
         "hourly_cost": current_session.hourly_cost,
         "category_filter": category,
         "results_by_category": results_by_category,
-        "summary": {
-            "avg_tokens_per_sec": avg_tokens_per_sec,
-            "total_time": total_time,
-            "total_tokens": total_tokens,
-            "cost_per_1k_tokens": cost_per_1k,
-            "tests_passed": len(successful_results),
-            "tests_total": len(selected_tests),
-        },
+        "summary": summary,
         "tests": results,
     }
 
+
+def _write_results(output: str, output_data: Dict[str, Any]) -> Path:
     output_path = Path(output)
     output_path.write_text(json.dumps(output_data, indent=2))
+    return output_path
 
-    console.print(f"\n[green]✓ Results saved to: {output_path}[/green]")
 
-    # Save to centralized database if enabled
-    if save_to_db:
-        try:
-            db = BenchmarkDatabase()
+def _save_results_to_db(
+    current_session,
+    results_by_category: Dict[str, Dict[str, Any]],
+    output_data: Dict[str, Any],
+    results: List[Dict[str, Any]],
+) -> None:
+    try:
+        db = BenchmarkDatabase()
 
-            # Get GPU metadata
-            gpu_info = GPU_TYPES.get(current_session.type, {})
-            gpu_count = gpu_info.get("gpus", 1)
-            vram_per_gpu = gpu_info.get("vram_per_gpu", 0)
+        gpu_info = GPU_TYPES.get(current_session.type, {})
+        gpu_count = gpu_info.get("gpus", 1)
+        vram_per_gpu = gpu_info.get("vram_per_gpu", 0)
 
-            # Get vLLM config (from env or defaults)
-            vllm_config = {
-                "tensor_parallel_size": gpu_count,
-                "max_model_len": 32768,  # Default, would ideally read from session config
-                "gpu_memory_utilization": 0.90,
-            }
+        vllm_config = {
+            "tensor_parallel_size": gpu_count,
+            "max_model_len": 32768,
+            "gpu_memory_utilization": 0.90,
+        }
 
-            # Create benchmark result
-            benchmark_result = db.create_result(
-                gpu_type=current_session.type,
-                gpu_count=gpu_count,
-                vram_per_gpu=vram_per_gpu,
-                hourly_cost=current_session.hourly_cost,
-                model_id=current_session.model_id,
-                model_category=get_model_category(current_session.model_id),
-                vllm_config=vllm_config,
-                results_by_category=results_by_category,
-                summary=output_data["summary"],
-                tests=results,
-            )
+        benchmark_result = db.create_result(
+            gpu_type=current_session.type,
+            gpu_count=gpu_count,
+            vram_per_gpu=vram_per_gpu,
+            hourly_cost=current_session.hourly_cost,
+            model_id=current_session.model_id,
+            model_category=get_model_category(current_session.model_id),
+            vllm_config=vllm_config,
+            results_by_category=results_by_category,
+            summary=output_data["summary"],
+            tests=results,
+        )
 
-            # Add to database
-            result_id = db.add_result(benchmark_result)
+        result_id = db.add_result(benchmark_result)
 
-            console.print(
-                f"[green]✓ Results saved to benchmark database (ID: {result_id[:8]})[/green]"
-            )
+        console.print(f"[green]✓ Results saved to benchmark database (ID: {result_id[:8]})[/green]")
 
-        except Exception as e:
-            console.print(f"[yellow]⚠ Failed to save to database: {e}[/yellow]")
-            console.print("[dim]Results are still saved to JSON file[/dim]")
+    except Exception as e:
+        console.print(f"[yellow]⚠ Failed to save to database: {e}[/yellow]")
+        console.print("[dim]Results are still saved to JSON file[/dim]")

@@ -5,7 +5,7 @@ from __future__ import annotations
 import inspect
 import io
 from dataclasses import dataclass
-from typing import Any, Iterable, get_args, get_origin
+from typing import Any, Iterable, Mapping, get_args, get_origin
 
 
 @dataclass
@@ -40,7 +40,7 @@ class CliRunner:
         except SystemExit as system_exit:
             exit_code = system_exit.code if isinstance(system_exit.code, int) else 1
             exc = system_exit
-        except Exception as error:  # pragma: no cover - mirrors click behavior
+        except Exception as error:  # pragma: no cover - mirrors click behavior  # NOSONAR
             exit_code = 1
             exc = error
 
@@ -49,6 +49,14 @@ class CliRunner:
     def _parse_args(self, command: Any, args: list[str]) -> tuple[dict[str, Any], list[Any]]:
         signature = inspect.signature(command)
         parameters = signature.parameters
+        kwargs, positionals = self._split_args(parameters, args)
+        bound_positionals = self._bind_positionals(parameters, positionals, kwargs)
+
+        return kwargs, bound_positionals
+
+    def _split_args(
+        self, parameters: Mapping[str, inspect.Parameter], args: list[str]
+    ) -> tuple[dict[str, Any], list[str]]:
         kwargs: dict[str, Any] = {}
         positionals: list[str] = []
 
@@ -56,19 +64,41 @@ class CliRunner:
         while idx < len(args):
             token = args[idx]
             if token.startswith("--"):
-                name = token[2:].replace("-", "_")
-                value: Any = True
-                if idx + 1 < len(args) and not args[idx + 1].startswith("-"):
-                    value = args[idx + 1]
-                    idx += 1
-                kwargs[name] = self._coerce_value(parameters.get(name), value)
+                idx = self._handle_long_option(parameters, args, idx, kwargs)
             elif token.startswith("-") and len(token) > 1:
-                name = token[1:].replace("-", "_")
-                kwargs[name] = True
+                self._handle_short_option(token, kwargs)
             else:
                 positionals.append(token)
             idx += 1
 
+        return kwargs, positionals
+
+    def _handle_long_option(
+        self,
+        parameters: Mapping[str, inspect.Parameter],
+        args: list[str],
+        idx: int,
+        kwargs: dict[str, Any],
+    ) -> int:
+        token = args[idx]
+        name = token[2:].replace("-", "_")
+        value: Any = True
+        if idx + 1 < len(args) and not args[idx + 1].startswith("-"):
+            value = args[idx + 1]
+            idx += 1
+        kwargs[name] = self._coerce_value(parameters.get(name), value)
+        return idx
+
+    def _handle_short_option(self, token: str, kwargs: dict[str, Any]) -> None:
+        name = token[1:].replace("-", "_")
+        kwargs[name] = True
+
+    def _bind_positionals(
+        self,
+        parameters: Mapping[str, inspect.Parameter],
+        positionals: list[str],
+        kwargs: dict[str, Any],
+    ) -> list[Any]:
         bound_positionals: list[Any] = []
         remaining_positionals = list(positionals)
         for param in parameters.values():
@@ -79,7 +109,7 @@ class CliRunner:
                     value = remaining_positionals.pop(0)
                     bound_positionals.append(self._coerce_value(param, value))
 
-        return kwargs, bound_positionals
+        return bound_positionals
 
     @staticmethod
     def _coerce_value(param: inspect.Parameter | None, value: Any) -> Any:

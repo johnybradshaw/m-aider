@@ -9,6 +9,8 @@ from .session import SessionManager, Session
 from .linode_client import LinodeManager
 from .config import Config
 
+CACHE_DIR = Path.home() / ".cache" / "linode-vms"
+
 
 class Watchdog:
     """Monitors VM activity and auto-destroys if idle."""
@@ -57,7 +59,7 @@ class Watchdog:
                 if request_count > 0:
                     return True
 
-        except (subprocess.TimeoutExpired, ValueError, Exception):
+        except (subprocess.TimeoutExpired, ValueError):
             pass
 
         return False
@@ -162,7 +164,7 @@ def start_watchdog_background(
     process.start()
 
     # Save PID for later management
-    cache_dir = Path.home() / ".cache" / "linode-vms" / session.name
+    cache_dir = CACHE_DIR / session.name
     pid_file = cache_dir / "watchdog.pid"
     pid_file.write_text(str(process.pid))
 
@@ -171,7 +173,7 @@ def start_watchdog_background(
 
 def stop_watchdog(session_name: str):
     """Stop watchdog for a session."""
-    cache_dir = Path.home() / ".cache" / "linode-vms" / session_name
+    cache_dir = CACHE_DIR / session_name
     pid_file = cache_dir / "watchdog.pid"
 
     if pid_file.exists():
@@ -187,6 +189,6 @@ def extend_watchdog(session_name: str):
     """Reset watchdog timer by touching activity file."""
     # This is a simple approach - stop and restart the watchdog
     # In a real implementation, you might use IPC to signal the watchdog
-    cache_dir = Path.home() / ".cache" / "linode-vms" / session_name
+    cache_dir = CACHE_DIR / session_name
     activity_file = cache_dir / "last_activity"
     activity_file.write_text(str(time.time()))

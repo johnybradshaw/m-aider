@@ -11,6 +11,8 @@ from ..benchmark_db import BenchmarkDatabase
 
 console = Console()
 
+METRIC_SORTS = {"tokens_per_sec", "cost_per_1k_tokens", "cost_efficiency"}
+
 
 @click.command(name="benchmark-compare")
 @click.option(
@@ -76,63 +78,77 @@ def cmd(
     """
     db = BenchmarkDatabase()
 
-    # Get results with filters
-    if sort_by in ["tokens_per_sec", "cost_per_1k_tokens", "cost_efficiency"]:
-        # Use optimized query that sorts by metric
-        ascending = sort_by == "cost_per_1k_tokens"  # Lower cost is better
-        results = db.get_best_by_metric(
+    results = _load_results(db, gpu_type, model_category, task_category, sort_by)
+
+    if not results:
+        _print_no_results()
+        return
+
+    _render_output(db, results, task_category, sort_by, format, output)
+
+
+def _load_results(
+    db: BenchmarkDatabase,
+    gpu_type: Optional[str],
+    model_category: Optional[str],
+    task_category: Optional[str],
+    sort_by: str,
+):
+    if sort_by in METRIC_SORTS:
+        ascending = sort_by == "cost_per_1k_tokens"
+        return db.get_best_by_metric(
             metric=sort_by,
             task_category=task_category,
             limit=100,
             ascending=ascending,
         )
-    else:
-        results = db.get_results(
-            gpu_type=gpu_type,
-            model_category=model_category,
-            task_category=task_category,
-        )
 
-    # Further filter by gpu_type and model_category if not using metric sort
-    if sort_by not in ["tokens_per_sec", "cost_per_1k_tokens", "cost_efficiency"]:
-        if gpu_type:
-            results = [r for r in results if r.gpu_type == gpu_type]
-        if model_category:
-            results = [r for r in results if r.model_category == model_category]
+    results = db.get_results(
+        gpu_type=gpu_type,
+        model_category=model_category,
+        task_category=task_category,
+    )
+    return _filter_results(results, gpu_type, model_category)
 
-    if not results:
-        console.print("[yellow]No benchmark results found matching the criteria.[/yellow]")
-        console.print("\nTry:")
-        console.print("  1. Running benchmarks with: maider benchmark-collect")
-        console.print("  2. Removing some filters to see more results")
-        return
 
-    # Display based on format
+def _filter_results(results, gpu_type: Optional[str], model_category: Optional[str]):
+    if gpu_type:
+        results = [r for r in results if r.gpu_type == gpu_type]
+    if model_category:
+        results = [r for r in results if r.model_category == model_category]
+    return results
+
+
+def _print_no_results():
+    console.print("[yellow]No benchmark results found matching the criteria.[/yellow]")
+    console.print("\nTry:")
+    console.print("  1. Running benchmarks with: maider benchmark-collect")
+    console.print("  2. Removing some filters to see more results")
+
+
+def _render_output(
+    db: BenchmarkDatabase,
+    results,
+    task_category: Optional[str],
+    sort_by: str,
+    format: str,
+    output: Optional[str],
+):
     if format == "table":
         _display_table(results, task_category, sort_by)
-    elif format == "json":
-        if not output:
-            console.print("[red]✗ --output required for JSON format[/red]")
-            raise click.Abort()
-        db.export("json", Path(output))
-        console.print(f"[green]✓ Exported {len(results)} results to: {output}[/green]")
-    elif format == "csv":
-        if not output:
-            console.print("[red]✗ --output required for CSV format[/red]")
-            raise click.Abort()
-        db.export("csv", Path(output))
-        console.print(f"[green]✓ Exported {len(results)} results to: {output}[/green]")
-    elif format == "markdown":
-        if not output:
-            console.print("[red]✗ --output required for Markdown format[/red]")
-            raise click.Abort()
-        db.export("markdown", Path(output))
-        console.print(f"[green]✓ Exported {len(results)} results to: {output}[/green]")
+        return
+
+    if not output:
+        console.print(f"[red]✗ --output required for {format.upper()} format[/red]")
+        raise click.Abort()
+
+    db.export(format, Path(output))
+    console.print(f"[green]✓ Exported {len(results)} results to: {output}[/green]")
 
 
 def _display_table(results, task_category: Optional[str], sort_metric: str):
     """Display results as a Rich table."""
-    console.print(f"\n[bold cyan]Benchmark Comparison[/bold cyan]")
+    console.print("\n[bold cyan]Benchmark Comparison[/bold cyan]")
     if task_category:
         console.print(f"[dim]Category: {task_category.replace('_', ' ').title()}[/dim]")
     console.print(f"[dim]Sorted by: {sort_metric.replace('_', ' ').title()}[/dim]\n")

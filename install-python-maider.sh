@@ -3,9 +3,10 @@
 
 set -euo pipefail
 
-echo "════════════════════════════════════════════════════════"
+BANNER_LINE="════════════════════════════════════════════════════════"
+echo "$BANNER_LINE"
 echo "  Installing Python-based Linode LLM maider"
-echo "════════════════════════════════════════════════════════"
+echo "$BANNER_LINE"
 echo
 
 # Check Python version
@@ -41,9 +42,9 @@ pip install -e . > /dev/null
 echo
 echo "✓ Installation complete!"
 echo
-echo "════════════════════════════════════════════════════════"
+echo "$BANNER_LINE"
 echo "  Quick Start"
-echo "════════════════════════════════════════════════════════"
+echo "$BANNER_LINE"
 echo
 echo "1. Activate the virtual environment:"
 echo "   source venv/bin/activate"
@@ -60,4 +61,4 @@ echo
 echo "5. Destroy a VM:"
 echo "   maider down"
 echo
-echo "════════════════════════════════════════════════════════"
+echo "$BANNER_LINE"

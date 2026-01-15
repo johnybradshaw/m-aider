@@ -259,15 +259,15 @@ class TestLinodeProviderHelperMethods:
     def test_get_hourly_cost(self, provider):
         """Test hourly cost lookup."""
         # Test known types (uses fallback to hardcoded data)
-        assert provider.get_hourly_cost("g2-gpu-rtx4000a1-s") == 0.52
-        assert provider.get_hourly_cost("g1-gpu-rtx6000-1") == 1.50
-        assert provider.get_hourly_cost("g1-gpu-rtx6000-2") == 3.00
-        assert provider.get_hourly_cost("g1-gpu-rtx6000-4") == 6.00
+        assert provider.get_hourly_cost("g2-gpu-rtx4000a1-s") == pytest.approx(0.52)
+        assert provider.get_hourly_cost("g1-gpu-rtx6000-1") == pytest.approx(1.50)
+        assert provider.get_hourly_cost("g1-gpu-rtx6000-2") == pytest.approx(3.00)
+        assert provider.get_hourly_cost("g1-gpu-rtx6000-4") == pytest.approx(6.00)
 
     def test_get_hourly_cost_unknown_type(self, provider):
         """Test hourly cost for unknown type returns 0."""
-        assert provider.get_hourly_cost("unknown-type") == 0.0
-        assert provider.get_hourly_cost("") == 0.0
+        assert provider.get_hourly_cost("unknown-type") == pytest.approx(0.0)
+        assert provider.get_hourly_cost("") == pytest.approx(0.0)
 
     def test_get_hourly_cost_increases_with_gpu_count(self, provider):
         """Test that cost increases with GPU count."""

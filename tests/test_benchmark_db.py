@@ -166,7 +166,7 @@ class TestBenchmarkDatabase:
         # Get best by tokens_per_sec (descending)
         best_tps = temp_db.get_best_by_metric("tokens_per_sec", limit=1)
         assert len(best_tps) == 1
-        assert best_tps[0].summary["avg_tokens_per_sec"] == 43.7
+        assert best_tps[0].summary["avg_tokens_per_sec"] == pytest.approx(43.7)
 
         # Get best by cost (ascending)
         best_cost = temp_db.get_best_by_metric("cost_per_1k_tokens", limit=1, ascending=True)

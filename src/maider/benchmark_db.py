@@ -241,7 +241,7 @@ class BenchmarkDatabase:
         tested_configs.sort(key=lambda x: x["last_run"], reverse=True)
 
         # Get unique GPU types
-        gpu_types_tested = len(set(config["gpu_type"] for config in tested_configs))
+        gpu_types_tested = len({config["gpu_type"] for config in tested_configs})
 
         # Total GPU types available (from linode provider)
         gpu_types_total = (

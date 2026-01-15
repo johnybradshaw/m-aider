@@ -22,30 +22,43 @@ def cmd(session_name: str):
 
     SESSION_NAME: Name of session to check (current session if not specified)
     """
-    # Get session
     session_mgr = SessionManager()
+    session = _get_session_or_exit(session_mgr, session_name)
 
+    _print_header()
+
+    ssh = SSHClient(session.ip)
+    gpu_monitor = GPUMonitor(ssh)
+
+    _print_gpu_memory_usage(gpu_monitor)
+    _print_tensor_parallel_status(gpu_monitor)
+    _run_throughput_test(session)
+    _print_footer()
+
+
+def _get_session_or_exit(session_mgr: SessionManager, session_name: str):
     if session_name:
         session = session_mgr.get_session(session_name)
         if not session:
             console.print(f"[red]Session '{session_name}' not found[/red]")
             sys.exit(1)
-    else:
-        session = session_mgr.get_current_session()
-        if not session:
-            console.print("[red]No current session found[/red]")
-            console.print("Run 'coder up' first or specify a session name")
-            sys.exit(1)
+        return session
 
+    session = session_mgr.get_current_session()
+    if not session:
+        console.print("[red]No current session found[/red]")
+        console.print("Run 'coder up' first or specify a session name")
+        sys.exit(1)
+    return session
+
+
+def _print_header():
     console.print("\n[bold]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[/bold]")
     console.print("[bold]  Quick Multi-GPU Health Check[/bold]")
     console.print("[bold]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[/bold]\n")
 
-    # Initialize SSH and GPU monitor
-    ssh = SSHClient(session.ip)
-    gpu_monitor = GPUMonitor(ssh)
 
-    # 1. GPU Memory Usage
+def _print_gpu_memory_usage(gpu_monitor: GPUMonitor):
     console.print("[bold]GPU Memory Usage:[/bold]")
     gpus = gpu_monitor.get_gpu_info()
 
@@ -64,17 +77,7 @@ def cmd(session_name: str):
     for gpu in gpus:
         memory_pct = gpu.memory_percent
         util = f"{gpu.utilization_percent}%"
-
-        # Color code by memory usage
-        if memory_pct < 10:
-            status_color = "red"
-            status = "IDLE"
-        elif memory_pct < 50:
-            status_color = "yellow"
-            status = f"{memory_pct:.0f}%"
-        else:
-            status_color = "green"
-            status = f"{memory_pct:.0f}%"
+        status_color, status = _memory_status(memory_pct)
 
         table.add_row(
             f"GPU {gpu.index}",
@@ -88,7 +91,16 @@ def cmd(session_name: str):
     console.print(table)
     console.print()
 
-    # 2. Multi-GPU Status
+
+def _memory_status(memory_pct: float) -> tuple[str, str]:
+    if memory_pct < 10:
+        return "red", "IDLE"
+    if memory_pct < 50:
+        return "yellow", f"{memory_pct:.0f}%"
+    return "green", f"{memory_pct:.0f}%"
+
+
+def _print_tensor_parallel_status(gpu_monitor: GPUMonitor):
     console.print("[bold]Multi-GPU Status:[/bold]")
     is_working, message = gpu_monitor.check_tensor_parallelism()
 
@@ -101,7 +113,8 @@ def cmd(session_name: str):
 
     console.print()
 
-    # 3. Quick Throughput Test
+
+def _run_throughput_test(session):
     console.print("[bold]Quick Throughput Test:[/bold]")
 
     try:
@@ -135,6 +148,8 @@ def cmd(session_name: str):
         console.print("     → Is the SSH tunnel active?")
         console.print("     → Is vLLM still loading the model?")
 
+
+def _print_footer():
     console.print()
     console.print("[bold]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[/bold]")
     console.print("For detailed performance analysis: [cyan]coder validate-perf[/cyan]")

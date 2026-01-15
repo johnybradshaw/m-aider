@@ -111,9 +111,7 @@ class RecommendationEngine:
                 recommendations.append(rec)
 
         # Rank recommendations based on preferences
-        recommendations = self._rank_recommendations(
-            recommendations, model_size_pref, budget_constraint
-        )
+        recommendations = self._rank_recommendations(recommendations, model_size_pref)
 
         return recommendations[:limit]
 
@@ -124,13 +122,18 @@ class RecommendationEngine:
         if budget == BudgetConstraint.NO_CONSTRAINT:
             return results
 
+        def matches_budget(cost: float) -> bool:
+            if budget == BudgetConstraint.UNDER_1:
+                return cost < 1.0
+            if budget == BudgetConstraint.ONE_TO_THREE:
+                return 1.0 <= cost <= 3.0
+            if budget == BudgetConstraint.OVER_THREE:
+                return cost > 3.0
+            return True
+
         filtered = []
         for result in results:
-            if budget == BudgetConstraint.UNDER_1 and result.hourly_cost < 1.0:
-                filtered.append(result)
-            elif budget == BudgetConstraint.ONE_TO_THREE and 1.0 <= result.hourly_cost <= 3.0:
-                filtered.append(result)
-            elif budget == BudgetConstraint.OVER_THREE and result.hourly_cost > 3.0:
+            if matches_budget(result.hourly_cost):
                 filtered.append(result)
 
         return filtered
@@ -199,7 +202,6 @@ class RecommendationEngine:
         self,
         recommendations: List[Recommendation],
         model_size_pref: ModelSizePreference,
-        budget_constraint: BudgetConstraint,
     ) -> List[Recommendation]:
         """Rank recommendations based on preferences."""
 

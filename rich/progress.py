@@ -21,6 +21,8 @@ class Progress:
 
     def __init__(self, *args: Any, **kwargs: Any) -> None:
         self._task_id = 0
+        self._last_total = None
+        self._last_update = None
 
     def __enter__(self) -> "Progress":
         return self
@@ -30,7 +32,9 @@ class Progress:
 
     def add_task(self, _: str, total: Any = None, **kwargs: Any) -> int:
         self._task_id += 1
+        self._last_total = total
         return self._task_id
 
     def update(self, task_id: int, advance: Any = None, **kwargs: Any) -> None:
+        self._last_update = {"task_id": task_id, "advance": advance}
         return None

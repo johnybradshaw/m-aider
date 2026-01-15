@@ -20,6 +20,8 @@ from .base import (
 )
 
 console = Console()
+RTX_6000_NAME = "RTX 6000 Ada"
+RTX_4000_NAME = "RTX 4000 Ada"
 
 # Cache for API type queries (TTL: 1 hour)
 _type_cache: Dict[str, Any] = {}
@@ -155,42 +157,9 @@ class LinodeProvider(CloudProvider):
 
             type_data = {}
             for api_type in api_types:
-                # Filter for GPU types only - check direct gpus attribute
-                if hasattr(api_type, "gpus") and api_type.gpus > 0:
-                    gpu_count = api_type.gpus
-
-                    # Extract GPU name from label or type ID
-                    gpu_name = self._extract_gpu_name_from_label(api_type.label, api_type.id)
-
-                    # Determine VRAM per GPU from label or type
-                    vram_per_gpu = self._extract_vram_from_gpu_type(gpu_name, api_type.label)
-
-                    # Get price (hourly cost)
-                    hourly_cost = (
-                        float(api_type.price.hourly) if hasattr(api_type, "price") else 0.0
-                    )
-
-                    # Determine regional availability based on type ID
-                    # RTX 4000 Ada types are available in new GPU regions
-                    # RTX 6000 Ada types are available in legacy GPU regions
-                    if "rtx4000" in api_type.id.lower():
-                        regions = gpu_regions.get("rtx4000", set())
-                    elif "rtx6000" in api_type.id.lower():
-                        regions = gpu_regions.get("rtx6000", set())
-                    else:
-                        # Unknown GPU type - include all GPU regions
-                        regions = gpu_regions.get("rtx4000", set()) | gpu_regions.get(
-                            "rtx6000", set()
-                        )
-
-                    type_data[api_type.id] = {
-                        "gpus": gpu_count,
-                        "gpu_name": gpu_name,
-                        "vram_per_gpu": vram_per_gpu,
-                        "hourly_cost": hourly_cost,
-                        "regions": regions,
-                        "label": api_type.label,
-                    }
+                details = self._build_type_details(api_type, gpu_regions)
+                if details:
+                    type_data[api_type.id] = details
 
             # Update cache
             _type_cache = type_data
@@ -251,6 +220,32 @@ class LinodeProvider(CloudProvider):
             # Fall back to hardcoded regions
             return {"rtx4000": RTX4000_REGIONS, "rtx6000": RTX6000_REGIONS}
 
+    def _build_type_details(self, api_type, gpu_regions: Dict[str, Set[str]]):
+        if not hasattr(api_type, "gpus") or api_type.gpus <= 0:
+            return None
+
+        gpu_name = self._extract_gpu_name_from_label(api_type.label, api_type.id)
+        vram_per_gpu = self._extract_vram_from_gpu_type(gpu_name, api_type.label)
+        hourly_cost = float(api_type.price.hourly) if hasattr(api_type, "price") else 0.0
+        regions = self._regions_for_type(api_type.id, gpu_regions)
+
+        return {
+            "gpus": api_type.gpus,
+            "gpu_name": gpu_name,
+            "vram_per_gpu": vram_per_gpu,
+            "hourly_cost": hourly_cost,
+            "regions": regions,
+            "label": api_type.label,
+        }
+
+    @staticmethod
+    def _regions_for_type(type_id: str, gpu_regions: Dict[str, Set[str]]) -> Set[str]:
+        if "rtx4000" in type_id.lower():
+            return gpu_regions.get("rtx4000", set())
+        if "rtx6000" in type_id.lower():
+            return gpu_regions.get("rtx6000", set())
+        return gpu_regions.get("rtx4000", set()) | gpu_regions.get("rtx6000", set())
+
     @staticmethod
     def _extract_gpu_name_from_label(label: str, type_id: str) -> str:
         """Extract GPU name from label or type ID.
@@ -264,15 +259,15 @@ class LinodeProvider(CloudProvider):
         """
         # Check label for GPU model names
         if "RTX6000" in label or "RTX 6000" in label:
-            return "RTX 6000 Ada"
+            return RTX_6000_NAME
         elif "RTX4000" in label or "RTX 4000" in label:
-            return "RTX 4000 Ada"
+            return RTX_4000_NAME
 
         # Check type ID
         if "rtx6000" in type_id.lower():
-            return "RTX 6000 Ada"
+            return RTX_6000_NAME
         elif "rtx4000" in type_id.lower():
-            return "RTX 4000 Ada"
+            return RTX_4000_NAME
 
         # Check for other GPU types
         if "V100" in label:
@@ -293,36 +288,51 @@ class LinodeProvider(CloudProvider):
         Returns:
             VRAM per GPU in GB
         """
-        # Known mappings
-        if "RTX 6000 Ada" in gpu_name or "rtx6000" in label.lower():
-            return 48
-        elif "RTX 4000 Ada" in gpu_name or "rtx4000" in label.lower():
-            return 20
-        elif "RTX 4000" in gpu_name:
-            return 20
-        elif "V100" in gpu_name:
-            return 32
-        elif "A100" in gpu_name:
-            return 40  # or 80 depending on variant
+        known_vram = LinodeProvider._vram_from_known_gpu(gpu_name, label)
+        if known_vram is not None:
+            return known_vram
 
-        # Try to extract from label (e.g., "96GB" in label)
+        extracted_vram = LinodeProvider._vram_from_label(label)
+        if extracted_vram is not None:
+            return extracted_vram
+
+        return 24
+
+    @staticmethod
+    def _vram_from_known_gpu(gpu_name: str, label: str) -> Optional[int]:
+        if RTX_6000_NAME in gpu_name or "rtx6000" in label.lower():
+            return 48
+        if RTX_4000_NAME in gpu_name or "rtx4000" in label.lower():
+            return 20
+        if "RTX 4000" in gpu_name:
+            return 20
+        if "V100" in gpu_name:
+            return 32
+        if "A100" in gpu_name:
+            return 40
+        return None
+
+    @staticmethod
+    def _vram_from_label(label: str) -> Optional[int]:
         import re
 
         match = re.search(r"(\d+)GB", label, re.IGNORECASE)
-        if match:
-            total_gb = int(match.group(1))
-            # Try to determine GPU count from label
-            gpu_count = 1
-            if "2x" in label or "Dual" in label:
-                gpu_count = 2
-            elif "4x" in label or "Quad" in label:
-                gpu_count = 4
-            elif "8x" in label or "Octo" in label:
-                gpu_count = 8
-            return total_gb // gpu_count if gpu_count > 0 else total_gb
+        if not match:
+            return None
 
-        # Default fallback
-        return 24
+        total_gb = int(match.group(1))
+        gpu_count = LinodeProvider._gpu_count_from_label(label)
+        return total_gb // gpu_count if gpu_count > 0 else total_gb
+
+    @staticmethod
+    def _gpu_count_from_label(label: str) -> int:
+        if "2x" in label or "Dual" in label:
+            return 2
+        if "4x" in label or "Quad" in label:
+            return 4
+        if "8x" in label or "Octo" in label:
+            return 8
+        return 1
 
     @staticmethod
     def _get_hardcoded_gpu_types() -> Dict[str, Any]:
@@ -334,7 +344,7 @@ class LinodeProvider(CloudProvider):
         return {
             type_id: {
                 "gpus": specs["gpus"],
-                "gpu_name": "RTX 6000 Ada" if "rtx6000" in type_id else "RTX 4000 Ada",
+                "gpu_name": RTX_6000_NAME if "rtx6000" in type_id else RTX_4000_NAME,
                 "vram_per_gpu": specs["vram_per_gpu"],
                 "hourly_cost": specs["hourly_cost"],
                 "regions": specs["regions"],

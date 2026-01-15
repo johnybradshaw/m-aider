@@ -30,6 +30,7 @@ After applying a preset, you must edit .env to add:
   - HUGGING_FACE_HUB_TOKEN=hf_xxx
   - FIREWALL_ID=123456
 EOF
+  return 0
 }
 
 list_presets() {
@@ -37,7 +38,7 @@ list_presets() {
   echo ""
 
   for preset in "$SCRIPT_DIR"/*.env; do
-    if [ -f "$preset" ]; then
+    if [[ -f "$preset" ]]; then
       basename="${preset##*/}"
       name="${basename%.env}"
 
@@ -56,6 +57,7 @@ list_presets() {
 
   echo "Usage: $0 <preset-name>"
   echo "Example: $0 rtx6000-2gpu"
+  return 0
 }
 
 apply_preset() {
@@ -63,12 +65,12 @@ apply_preset() {
   local preset_file="$SCRIPT_DIR/${preset_name}.env"
   local env_file="$REPO_ROOT/.env"
 
-  if [ ! -f "$preset_file" ]; then
-    echo "Error: Preset '$preset_name' not found"
-    echo ""
-    echo "Available presets:"
+  if [[ ! -f "$preset_file" ]]; then
+    echo "Error: Preset '$preset_name' not found" >&2
+    echo "" >&2
+    echo "Available presets:" >&2
     for p in "$SCRIPT_DIR"/*.env; do
-      if [ -f "$p" ]; then
+      if [[ -f "$p" ]]; then
         echo "  - $(basename "${p%.env}")"
       fi
     done
@@ -83,7 +85,7 @@ apply_preset() {
   local existing_firewall=""
   local existing_region=""
 
-  if [ -f "$env_file" ]; then
+  if [[ -f "$env_file" ]]; then
     # Match HuggingFace tokens (hf_...) or 1Password references (op://...)
     if grep -qE "^HUGGING_FACE_HUB_TOKEN=(hf_|op://)" "$env_file" 2>/dev/null; then
       has_token=true
@@ -107,7 +109,7 @@ apply_preset() {
   echo ""
 
   # Re-add existing credentials if found
-  if [ "$has_token" = true ] && [ -n "$existing_token" ]; then
+  if [[ "$has_token" == true && -n "$existing_token" ]]; then
     # macOS and Linux compatible sed
     if sed --version >/dev/null 2>&1; then
       # GNU sed (Linux)
@@ -119,7 +121,7 @@ apply_preset() {
     echo "✓ Preserved existing HUGGING_FACE_HUB_TOKEN"
   fi
 
-  if [ "$has_firewall" = true ] && [ -n "$existing_firewall" ]; then
+  if [[ "$has_firewall" == true && -n "$existing_firewall" ]]; then
     # macOS and Linux compatible sed
     if sed --version >/dev/null 2>&1; then
       # GNU sed (Linux)
@@ -131,7 +133,7 @@ apply_preset() {
     echo "✓ Preserved existing FIREWALL_ID"
   fi
 
-  if [ "$has_region" = true ] && [ -n "$existing_region" ]; then
+  if [[ "$has_region" == true && -n "$existing_region" ]]; then
     # Escape for sed replacement to handle special characters like '&' and '\'
     escaped_region=$(printf '%s\n' "$existing_region" | sed -e 's/[&\\|]/\\&/g')
 
@@ -161,7 +163,7 @@ apply_preset() {
 
   echo ""
 
-  if [ "$needs_config" = true ]; then
+  if [[ "$needs_config" == true ]]; then
     echo "Edit .env to add required credentials:"
     echo "  nano .env"
     echo ""
@@ -180,16 +182,18 @@ apply_preset() {
 
   echo ""
   echo "Next steps:"
-  if [ "$needs_config" = true ]; then
+  if [[ "$needs_config" == true ]]; then
     echo "  1. nano .env  # Add credentials"
     echo "  2. ./coder up"
   else
     echo "  ./coder up"
   fi
+  return 0
 }
 
 main() {
-  case "${1:-}" in
+  local command="${1:-}"
+  case "$command" in
     list|--list|-l)
       list_presets
       ;;
@@ -197,9 +201,10 @@ main() {
       usage
       ;;
     *)
-      apply_preset "$1"
+      apply_preset "$command"
       ;;
   esac
+  return 0
 }
 
 main "$@"

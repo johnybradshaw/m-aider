@@ -49,6 +49,8 @@ class Session:
 class SessionManager:
     """Manages VM sessions."""
 
+    STATE_FILENAME = "state.json"
+
     def __init__(self, cache_dir: Optional[Path] = None):
         """Initialize session manager."""
         self.cache_dir = cache_dir or (Path.home() / ".cache" / "linode-vms")
@@ -107,7 +109,7 @@ class SessionManager:
         session_dir = self.cache_dir / name
         session_dir.mkdir(parents=True, exist_ok=True)
 
-        state_file = session_dir / "state.json"
+        state_file = session_dir / self.STATE_FILENAME
         state_file.write_text(json.dumps(asdict(session), indent=2))
 
         # Create aider-env file
@@ -121,7 +123,7 @@ class SessionManager:
         Handles migration from old sessions with linode_id to new format
         with provider_instance_id.
         """
-        state_file = self.cache_dir / name / "state.json"
+        state_file = self.cache_dir / name / self.STATE_FILENAME
         if not state_file.exists():
             return None
 
@@ -171,7 +173,7 @@ class SessionManager:
 
         # Save updated state
         session_dir = self.cache_dir / name
-        state_file = session_dir / "state.json"
+        state_file = session_dir / self.STATE_FILENAME
         state_file.write_text(json.dumps(asdict(session), indent=2))
 
         # Regenerate aider-env file

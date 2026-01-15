@@ -67,7 +67,7 @@ class TestSessionManager:
         assert session.name == "test-session"
         assert session.linode_id == 12345678
         assert session.ip == "192.0.2.1"
-        assert session.hourly_cost == 1.50
+        assert session.hourly_cost == pytest.approx(1.50)
 
         # Verify files created
         session_dir = temp_dir / "test-session"

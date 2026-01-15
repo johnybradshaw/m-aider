@@ -6,17 +6,16 @@ from pathlib import Path
 import click
 from rich.console import Console
 from rich.prompt import Prompt, Confirm
-from rich.table import Table
 from rich.panel import Panel
 
 from ..config import Config
-from ..linode_client import LinodeManager
 
 # Import GPU data from provider abstraction
 from ..providers.linode import GPU_REGIONS as LINODE_GPU_REGIONS
 from ..providers.linode import GPU_TYPES as LINODE_GPU_TYPES
 
 console = Console()
+CHOICE_PROMPT = "\nChoice"
 
 
 # Model recommendations by capability
@@ -93,6 +92,50 @@ def cmd():
 
     Guides you through selecting capability, region, GPU type, and model.
     """
+    _print_wizard_header()
+    firewall_id, hf_token = _load_existing_credentials()
+
+    capability, custom_model = _choose_capability()
+    selected_region = _choose_region()
+    selected_type, selected_type_info = _choose_gpu_type(capability, selected_region)
+    model_id, served_name, context_length = _configure_model(capability, custom_model)
+    profile_choice, profile = _choose_profile()
+    deployment_options = _choose_deployment_options()
+
+    firewall_id, hf_token = _ensure_credentials(firewall_id, hf_token)
+    _print_summary(
+        selected_region,
+        selected_type,
+        selected_type_info,
+        model_id,
+        served_name,
+        context_length,
+        profile_choice,
+        profile,
+        deployment_options,
+    )
+
+    if not Confirm.ask("Save configuration to .env?", default=True):
+        console.print("\n[yellow]Configuration not saved[/yellow]")
+        return
+
+    _save_env_files(
+        selected_region,
+        selected_type,
+        selected_type_info,
+        model_id,
+        served_name,
+        context_length,
+        profile_choice,
+        profile,
+        deployment_options,
+        firewall_id,
+        hf_token,
+    )
+    _print_next_steps()
+
+
+def _print_wizard_header():
     console.print()
     console.print(
         Panel.fit(
@@ -102,46 +145,45 @@ def cmd():
     )
     console.print()
 
-    # Load existing config to preserve credentials
+
+def _load_existing_credentials():
     try:
         existing_config = Config()
-        firewall_id = existing_config.firewall_id
-        hf_token = existing_config.hf_token
-        linode_token = existing_config.linode_token
+        return existing_config.firewall_id, existing_config.hf_token
     except Exception:
-        firewall_id = None
-        hf_token = None
-        linode_token = None
+        return None, None
 
-    # Step 1: Capability selection
+
+def _choose_capability():
     console.print("[bold]Step 1: What capability do you need?[/bold]\n")
-
-    capability_choices = []
-    for key, info in CAPABILITY_MODELS.items():
-        capability_choices.append(f"{info['name']} - {info['description']} ({info['cost_range']})")
+    capability_choices = [
+        f"{info['name']} - {info['description']} ({info['cost_range']})"
+        for info in CAPABILITY_MODELS.values()
+    ]
     capability_choices.append("Custom - I'll specify my own model")
 
     for i, choice in enumerate(capability_choices, 1):
         console.print(f"  {i}) {choice}")
 
     capability_idx = (
-        int(Prompt.ask("\nChoice", choices=[str(i) for i in range(1, len(capability_choices) + 1)]))
+        int(
+            Prompt.ask(
+                CHOICE_PROMPT, choices=[str(i) for i in range(1, len(capability_choices) + 1)]
+            )
+        )
         - 1
     )
 
     if capability_idx < len(CAPABILITY_MODELS):
         capability_key = list(CAPABILITY_MODELS.keys())[capability_idx]
-        capability = CAPABILITY_MODELS[capability_key]
-        custom_model = False
-    else:
-        capability = None
-        custom_model = True
+        return CAPABILITY_MODELS[capability_key], False
+    return None, True
 
-    # Step 2: Region selection
-    console.print(f"\n[bold]Step 2: Select your region[/bold]")
+
+def _choose_region():
+    console.print("\n[bold]Step 2: Select your region[/bold]")
     console.print("[dim]Only regions with GPU availability shown[/dim]\n")
 
-    # GPU-capable regions only
     regions = [
         ("us-east", "Newark, NJ (RTX 6000)"),
         ("us-ord", "Chicago, IL (RTX 4000 Ada)"),
@@ -161,105 +203,127 @@ def cmd():
         console.print(f"  {i}) {region_id} - {region_name}")
 
     region_idx = (
-        int(Prompt.ask("\nChoice", choices=[str(i) for i in range(1, len(regions) + 1)])) - 1
+        int(Prompt.ask(CHOICE_PROMPT, choices=[str(i) for i in range(1, len(regions) + 1)]))
+        - 1
     )
-    selected_region = regions[region_idx][0]
+    return regions[region_idx][0]
 
-    # Step 3: GPU type selection
-    console.print(f"\n[bold]Step 3: Select VM type[/bold]")
+
+def _choose_gpu_type(capability, selected_region: str):
+    console.print("\n[bold]Step 3: Select VM type[/bold]")
     console.print(f"[dim]Region: {selected_region}[/dim]\n")
 
-    # Filter GPU types by capability
-    if capability:
-        min_vram = capability["min_vram_gb"]
-        suitable_types = {
-            type_id: info
-            for type_id, info in GPU_TYPES.items()
-            if info["gpus"] * info["vram_per_gpu"] >= min_vram
-        }
-    else:
-        suitable_types = GPU_TYPES
-
+    suitable_types = _filter_gpu_types(capability)
     if not suitable_types:
         console.print("[red]No suitable GPU types found for this capability[/red]")
         sys.exit(1)
 
-    # Sort by cost
     sorted_types = sorted(suitable_types.items(), key=lambda x: x[1]["hourly_cost"])
-
-    type_choices = []
-    for type_id, info in sorted_types:
-        total_vram = info["gpus"] * info["vram_per_gpu"]
-        gpu_label = f"{info['gpus']}x" if info["gpus"] > 1 else ""
-        vram_label = "RTX 6000 Ada" if "rtx6000" in type_id else "RTX 4000 Ada"
-
-        choice_text = f"{gpu_label}{vram_label} ({total_vram}GB) - ${info['hourly_cost']:.2f}/hr"
-        if sorted_types[0][0] == type_id:
-            choice_text += " ← Recommended"
-
-        type_choices.append((type_id, choice_text, info))
+    type_choices = _build_type_choices(sorted_types)
 
     for i, (_, choice_text, _) in enumerate(type_choices, 1):
         console.print(f"  {i}) {choice_text}")
 
     type_idx = (
-        int(Prompt.ask("\nChoice", choices=[str(i) for i in range(1, len(type_choices) + 1)])) - 1
+        int(Prompt.ask(CHOICE_PROMPT, choices=[str(i) for i in range(1, len(type_choices) + 1)]))
+        - 1
     )
     selected_type = type_choices[type_idx][0]
     selected_type_info = type_choices[type_idx][2]
+    return selected_type, selected_type_info
 
-    # Step 4: Model configuration
-    console.print(f"\n[bold]Step 4: Model configuration[/bold]\n")
+
+def _filter_gpu_types(capability):
+    if not capability:
+        return GPU_TYPES
+    min_vram = capability["min_vram_gb"]
+    return {
+        type_id: info
+        for type_id, info in GPU_TYPES.items()
+        if info["gpus"] * info["vram_per_gpu"] >= min_vram
+    }
+
+
+def _build_type_choices(sorted_types):
+    type_choices = []
+    for type_id, info in sorted_types:
+        total_vram = info["gpus"] * info["vram_per_gpu"]
+        gpu_label = f"{info['gpus']}x" if info["gpus"] > 1 else ""
+        vram_label = "RTX 6000 Ada" if "rtx6000" in type_id else "RTX 4000 Ada"
+        choice_text = f"{gpu_label}{vram_label} ({total_vram}GB) - ${info['hourly_cost']:.2f}/hr"
+        if sorted_types[0][0] == type_id:
+            choice_text += " ← Recommended"
+        type_choices.append((type_id, choice_text, info))
+    return type_choices
+
+
+def _configure_model(capability, custom_model: bool):
+    console.print("\n[bold]Step 4: Model configuration[/bold]\n")
 
     if custom_model:
         model_id = Prompt.ask("Enter HuggingFace model ID")
         served_name = Prompt.ask("Served model name", default="coder")
         context_length = int(Prompt.ask("Context length (tokens)", default="16384"))
-    else:
-        console.print(f"  Default model: {capability['recommended_model']}")
-        console.print(f"  Context: {capability['context_length']} tokens\n")
+        return model_id, served_name, context_length
 
-        custom = Confirm.ask("Use custom model instead?", default=False)
+    console.print(f"  Default model: {capability['recommended_model']}")
+    console.print(f"  Context: {capability['context_length']} tokens\n")
+    if Confirm.ask("Use custom model instead?", default=False):
+        model_id = Prompt.ask("Enter HuggingFace model ID")
+        served_name = Prompt.ask("Served model name", default="coder")
+        context_length = int(
+            Prompt.ask("Context length (tokens)", default=str(capability["context_length"]))
+        )
+        return model_id, served_name, context_length
 
-        if custom:
-            model_id = Prompt.ask("Enter HuggingFace model ID")
-            served_name = Prompt.ask("Served model name", default="coder")
-            context_length = int(
-                Prompt.ask("Context length (tokens)", default=str(capability["context_length"]))
-            )
-        else:
-            model_id = capability["recommended_model"]
-            served_name = "coder"
-            context_length = capability["context_length"]
+    return capability["recommended_model"], "coder", capability["context_length"]
 
-    # Step 4b: Performance profile
-    console.print(f"\n[bold]Step 4b: Performance profile[/bold]\n")
+
+def _choose_profile():
+    console.print("\n[bold]Step 4b: Performance profile[/bold]\n")
     for key, profile in PERF_PROFILES.items():
         console.print(f"  {key}) {profile['label']}")
     profile_choice = Prompt.ask("Choice", choices=list(PERF_PROFILES.keys()), default="B")
-    profile = PERF_PROFILES[profile_choice]
+    return profile_choice, PERF_PROFILES[profile_choice]
 
-    # Step 4c: Reliability and usability toggles
-    console.print(f"\n[bold]Step 4c: Deployment options[/bold]\n")
-    enable_openwebui = Confirm.ask("Enable Open WebUI?", default=True)
-    enable_hf_cache = Confirm.ask("Enable persistent HF cache volume?", default=True)
-    enable_healthchecks = Confirm.ask("Enable container health checks?", default=False)
-    enable_nccl_env = Confirm.ask("Enable NCCL reliability env vars?", default=False)
 
-    # Step 5: Credentials (if needed)
+def _choose_deployment_options():
+    console.print("\n[bold]Step 4c: Deployment options[/bold]\n")
+    return {
+        "enable_openwebui": Confirm.ask("Enable Open WebUI?", default=True),
+        "enable_hf_cache": Confirm.ask("Enable persistent HF cache volume?", default=True),
+        "enable_healthchecks": Confirm.ask("Enable container health checks?", default=False),
+        "enable_nccl_env": Confirm.ask("Enable NCCL reliability env vars?", default=False),
+    }
+
+
+def _ensure_credentials(firewall_id, hf_token):
     if not firewall_id:
-        console.print(f"\n[bold]Step 5: Linode Configuration[/bold]\n")
+        console.print("\n[bold]Step 5: Linode Configuration[/bold]\n")
         console.print("You need a Linode firewall ID for SSH access.")
         console.print("Create one at: https://cloud.linode.com/firewalls\n")
         firewall_id = Prompt.ask("Firewall ID")
 
     if not hf_token:
-        console.print(f"\n[bold]Step 6: HuggingFace Token[/bold]\n")
+        console.print("\n[bold]Step 6: HuggingFace Token[/bold]\n")
         console.print("You need a HuggingFace token to download models.")
         console.print("Get one at: https://huggingface.co/settings/tokens\n")
         hf_token = Prompt.ask("HuggingFace Token (or 1Password reference)")
 
-    # Summary
+    return firewall_id, hf_token
+
+
+def _print_summary(
+    selected_region,
+    selected_type,
+    selected_type_info,
+    model_id,
+    served_name,
+    context_length,
+    profile_choice,
+    profile,
+    deployment_options,
+):
     console.print()
     console.print(
         Panel.fit(
@@ -270,7 +334,6 @@ def cmd():
     console.print()
 
     total_vram = selected_type_info["gpus"] * selected_type_info["vram_per_gpu"]
-
     console.print(f"  Region:       {selected_region}")
     console.print(f"  VM Type:      {selected_type}")
     console.print(f"  GPUs:         {selected_type_info['gpus']}")
@@ -281,19 +344,31 @@ def cmd():
     console.print(f"  Served as:    {served_name}")
     console.print(f"  Context:      {context_length} tokens")
     console.print(f"  Profile:      {profile_choice} ({profile['label']})")
-    console.print(f"  Open WebUI:   {'Yes' if enable_openwebui else 'No'}")
-    console.print(f"  HF Cache:     {'Yes' if enable_hf_cache else 'No'}")
-    console.print(f"  Healthchecks:{' Yes' if enable_healthchecks else ' No'}")
-    console.print(f"  NCCL Env:     {'Yes' if enable_nccl_env else 'No'}")
+    console.print(
+        f"  Open WebUI:   {'Yes' if deployment_options['enable_openwebui'] else 'No'}"
+    )
+    console.print(f"  HF Cache:     {'Yes' if deployment_options['enable_hf_cache'] else 'No'}")
+    console.print(
+        f"  Healthchecks:{' Yes' if deployment_options['enable_healthchecks'] else ' No'}"
+    )
+    console.print(f"  NCCL Env:     {'Yes' if deployment_options['enable_nccl_env'] else 'No'}")
     console.print()
 
-    if not Confirm.ask("Save configuration to .env?", default=True):
-        console.print("\n[yellow]Configuration not saved[/yellow]")
-        return
 
-    # Generate .env content
+def _save_env_files(
+    selected_region,
+    selected_type,
+    selected_type_info,
+    model_id,
+    served_name,
+    context_length,
+    profile_choice,
+    profile,
+    deployment_options,
+    firewall_id,
+    hf_token,
+):
     tensor_parallel_size = selected_type_info["gpus"]
-
     env_content = f"""# Linode Configuration
 REGION={selected_region}
 TYPE={selected_type}
@@ -313,17 +388,15 @@ VLLM_EXTRA_ARGS={profile['extra_args']}
 
 # Deployment Options
 PERF_PROFILE={profile_choice}
-ENABLE_OPENWEBUI={"true" if enable_openwebui else "false"}
-ENABLE_HF_CACHE={"true" if enable_hf_cache else "false"}
-ENABLE_HEALTHCHECKS={"true" if enable_healthchecks else "false"}
-ENABLE_NCCL_ENV={"true" if enable_nccl_env else "false"}
+ENABLE_OPENWEBUI={"true" if deployment_options["enable_openwebui"] else "false"}
+ENABLE_HF_CACHE={"true" if deployment_options["enable_hf_cache"] else "false"}
+ENABLE_HEALTHCHECKS={"true" if deployment_options["enable_healthchecks"] else "false"}
+ENABLE_NCCL_ENV={"true" if deployment_options["enable_nccl_env"] else "false"}
 """
 
-    # Save .env
     env_path = Path.cwd() / ".env"
     env_path.write_text(env_content)
 
-    # Save .env.secrets
     secrets_content = f"""# HuggingFace Token
 HUGGING_FACE_HUB_TOKEN={hf_token}
 """
@@ -333,6 +406,8 @@ HUGGING_FACE_HUB_TOKEN={hf_token}
 
     console.print("\n[green]✓ Configuration saved![/green]\n")
 
+
+def _print_next_steps():
     console.print("[bold]Next steps:[/bold]")
     console.print("  coder validate    # Verify configuration")
     console.print("  coder up          # Deploy VM and launch")

@@ -188,11 +188,11 @@ class TestRecommendationEngine:
 
         # Edge case: zero cost
         eff = engine.calculate_cost_efficiency(45.0, 0.0)
-        assert eff == 0.0
+        assert eff == pytest.approx(0.0)
 
         # Edge case: zero tokens
         eff = engine.calculate_cost_efficiency(0.0, 3.00)
-        assert eff == 0.0
+        assert eff == pytest.approx(0.0)
 
     def test_calculate_confidence(self):
         """Test confidence level calculation."""

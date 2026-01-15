@@ -31,66 +31,74 @@ def cmd(session: str, force: bool):
     """
     session_mgr = SessionManager()
 
-    # Handle single session cleanup
     if session:
-        target_session = session_mgr.get_session(session)
-        if not target_session:
-            console.print(f"[red]Session '{session}' not found[/red]")
-            return
+        _cleanup_single_session(session_mgr, session, force)
+        return
 
-        console.print(f"[bold]Cleaning up session: {session}[/bold]\n")
-        console.print(f"  Linode ID: {target_session.linode_id}")
-        console.print(f"  IP: {target_session.ip}")
+    _cleanup_bulk_sessions(session_mgr)
 
-        # If force flag is set, skip VM check
-        if force:
-            console.print("\n[yellow]⚠ Force mode enabled - skipping VM existence check[/yellow]")
-            response = input("\nRemove local session state? [y/N]: ")
-            if response.lower() != "y":
-                console.print("Cancelled")
-                return
 
-            session_dir = session_mgr.cache_dir / session
-            shutil.rmtree(session_dir)
-            console.print(f"[green]✓ Removed local session state: {session}[/green]")
-            console.print(
-                "\n[yellow]Note: If the VM still exists, you must delete it manually:[/yellow]"
+def _cleanup_single_session(session_mgr: SessionManager, session: str, force: bool):
+    target_session = session_mgr.get_session(session)
+    if not target_session:
+        console.print(f"[red]Session '{session}' not found[/red]")
+        return
+
+    console.print(f"[bold]Cleaning up session: {session}[/bold]\n")
+    console.print(f"  Linode ID: {target_session.linode_id}")
+    console.print(f"  IP: {target_session.ip}")
+
+    if force:
+        _force_remove_session(session_mgr, session, target_session)
+        return
+
+    _remove_session_if_vm_missing(session_mgr, session, target_session)
+
+
+def _force_remove_session(session_mgr: SessionManager, session: str, target_session):
+    console.print("\n[yellow]⚠ Force mode enabled - skipping VM existence check[/yellow]")
+    response = input("\nRemove local session state? [y/N]: ")
+    if response.lower() != "y":
+        console.print("Cancelled")
+        return
+
+    session_dir = session_mgr.cache_dir / session
+    shutil.rmtree(session_dir)
+    console.print(f"[green]✓ Removed local session state: {session}[/green]")
+    console.print("\n[yellow]Note: If the VM still exists, you must delete it manually:[/yellow]")
+    console.print(f"  https://cloud.linode.com/linodes/{target_session.linode_id}")
+
+
+def _remove_session_if_vm_missing(session_mgr: SessionManager, session: str, target_session):
+    try:
+        config = Config()
+        linode_mgr = LinodeManager(config)
+        instance = linode_mgr.get_instance(target_session.linode_id)
+    except Exception as e:
+        console.print(f"[red]✗ Cannot check VM status: {e}[/red]")
+        console.print("\nUse --force to skip VM check and remove local state anyway")
+        return
+
+    if instance:
+        console.print(f"\n[yellow]⚠ VM {target_session.linode_id} still exists![/yellow]")
+        console.print("\n[bold]Options:[/bold]")
+        console.print(f"  1. Delete the VM first: coder down {session}")
+        console.print(
+            "  2. Force-remove local state anyway: coder cleanup --session {} --force".format(
+                session
             )
-            console.print(f"  https://cloud.linode.com/linodes/{target_session.linode_id}")
-            return
+        )
+        console.print("  3. Manually delete from web dashboard:")
+        console.print(f"     https://cloud.linode.com/linodes/{target_session.linode_id}")
+        return
 
-        # Otherwise, check if VM exists
-        try:
-            config = Config()
-            linode_mgr = LinodeManager(config)
-            instance = linode_mgr.get_instance(target_session.linode_id)
+    session_dir = session_mgr.cache_dir / session
+    shutil.rmtree(session_dir)
+    console.print(f"[green]✓ Removed orphaned session: {session}[/green]")
+    console.print(f"[dim](Linode {target_session.linode_id} no longer exists)[/dim]")
 
-            if instance:
-                console.print(f"\n[yellow]⚠ VM {target_session.linode_id} still exists![/yellow]")
-                console.print("\n[bold]Options:[/bold]")
-                console.print(f"  1. Delete the VM first: coder down {session}")
-                console.print(
-                    "  2. Force-remove local state anyway: coder cleanup --session {} --force".format(
-                        session
-                    )
-                )
-                console.print(f"  3. Manually delete from web dashboard:")
-                console.print(f"     https://cloud.linode.com/linodes/{target_session.linode_id}")
-                return
-            else:
-                # VM doesn't exist, safe to remove
-                session_dir = session_mgr.cache_dir / session
-                shutil.rmtree(session_dir)
-                console.print(f"[green]✓ Removed orphaned session: {session}[/green]")
-                console.print(f"[dim](Linode {target_session.linode_id} no longer exists)[/dim]")
-                return
 
-        except Exception as e:
-            console.print(f"[red]✗ Cannot check VM status: {e}[/red]")
-            console.print("\nUse --force to skip VM check and remove local state anyway")
-            return
-
-    # Handle bulk cleanup
+def _cleanup_bulk_sessions(session_mgr: SessionManager):
     sessions = session_mgr.list_sessions()
 
     if not sessions:
@@ -98,17 +106,7 @@ def cmd(session: str, force: bool):
         return
 
     console.print("[bold]Checking for stale sessions...[/bold]\n")
-
-    # Try to load config for Linode API
-    try:
-        config = Config()
-        linode_mgr = LinodeManager(config)
-        can_check_vms = True
-    except Exception:
-        console.print(
-            "[yellow]⚠ No LINODE_TOKEN - can only remove sessions with missing state files[/yellow]\n"
-        )
-        can_check_vms = False
+    linode_mgr = _get_linode_manager()
 
     removed_count = 0
 
@@ -120,33 +118,9 @@ def cmd(session: str, force: bool):
         task = progress.add_task("Checking sessions...", total=len(sessions))
 
         for session in sessions:
-            session_dir = session_mgr.cache_dir / session.name
-
-            # Check if state file exists
-            state_file = session_dir / "state.json"
-            if not state_file.exists():
-                console.print(
-                    f"[yellow]  Removing session with missing state: {session.name}[/yellow]"
-                )
-                shutil.rmtree(session_dir)
+            removed = _cleanup_session_dir(session_mgr, linode_mgr, session)
+            if removed:
                 removed_count += 1
-                progress.advance(task)
-                continue
-
-            # Check if VM still exists
-            if can_check_vms:
-                try:
-                    instance = linode_mgr.get_instance(session.linode_id)
-                    if not instance:
-                        console.print(
-                            f"[yellow]  Removing stale session: {session.name} (Linode {session.linode_id} no longer exists)[/yellow]"
-                        )
-                        shutil.rmtree(session_dir)
-                        removed_count += 1
-                except Exception:
-                    # If we can't check, keep the session
-                    pass
-
             progress.advance(task)
 
     console.print()
@@ -154,3 +128,39 @@ def cmd(session: str, force: bool):
         console.print(f"[green]✓ Removed {removed_count} stale session(s)[/green]")
     else:
         console.print("[green]✓ No stale sessions found[/green]")
+
+
+def _get_linode_manager():
+    try:
+        config = Config()
+        return LinodeManager(config)
+    except Exception:
+        console.print(
+            "[yellow]⚠ No LINODE_TOKEN - can only remove sessions with missing state files[/yellow]\n"
+        )
+        return None
+
+
+def _cleanup_session_dir(session_mgr: SessionManager, linode_mgr, session):
+    session_dir = session_mgr.cache_dir / session.name
+    state_file = session_dir / "state.json"
+    if not state_file.exists():
+        console.print(f"[yellow]  Removing session with missing state: {session.name}[/yellow]")
+        shutil.rmtree(session_dir)
+        return True
+
+    if not linode_mgr:
+        return False
+
+    try:
+        instance = linode_mgr.get_instance(session.linode_id)
+        if not instance:
+            console.print(
+                f"[yellow]  Removing stale session: {session.name} (Linode {session.linode_id} no longer exists)[/yellow]"
+            )
+            shutil.rmtree(session_dir)
+            return True
+    except Exception:
+        pass
+
+    return False

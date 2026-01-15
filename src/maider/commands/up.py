@@ -17,6 +17,9 @@ from ..watchdog import start_watchdog_background
 from ..healing import check_and_heal_vllm
 
 console = Console()
+PROGRESS_TEXT = "[progress.description]{task.description}"
+SSH_CONNECT_TIMEOUT = "ConnectTimeout=5"
+SSH_STRICT_HOST_KEY = "StrictHostKeyChecking=no"
 
 
 @click.command(name="up")
@@ -27,16 +30,48 @@ def cmd(name: str, launch_aider: bool):
 
     NAME: Optional session name (auto-generated if not provided)
     """
-    # Load configuration
     config = Config()
-    errors = config.validate()
-    if errors:
-        console.print("[red]Configuration errors:[/red]")
-        for error in errors:
-            console.print(f"  • {error}")
-        sys.exit(1)
+    _validate_config_or_exit(config)
 
-    # Validate tensor parallel size matches GPU count
+    gpu_count = _sync_tensor_parallel(config)
+    hourly_cost = config.get_hourly_cost()
+    _print_config(config, gpu_count, hourly_cost)
+
+    session_mgr = SessionManager()
+    linode_mgr = LinodeManager(config)
+
+    name = name or session_mgr.generate_session_name(config.model_id)
+    console.print(f"Created session: [cyan]{name}[/cyan]\n")
+
+    instance = _create_instance_or_exit(linode_mgr, name)
+    session = _create_session(session_mgr, name, instance, config, hourly_cost)
+    session_mgr.set_current_session(session)
+
+    _wait_for_ssh_or_exit(instance.ipv4[0])
+    _wait_for_cloud_init_or_exit(instance.ipv4[0])
+    console.print("\n[bold]Setting up SSH tunnel...[/bold]")
+    _setup_ssh_tunnel(instance.ipv4[0], config)
+
+    vllm_ready = _wait_for_vllm_ready(session, config, name, instance.ipv4[0])
+    if vllm_ready:
+        _generate_aider_metadata(session.served_model_name, config.vllm_max_model_len)
+
+    _print_access(config, hourly_cost)
+    _start_watchdog_if_enabled(session, config)
+    _finish_or_launch(session, config, launch_aider)
+
+
+def _validate_config_or_exit(config: Config):
+    errors = config.validate()
+    if not errors:
+        return
+    console.print("[red]Configuration errors:[/red]")
+    for error in errors:
+        console.print(f"  • {error}")
+    sys.exit(1)
+
+
+def _sync_tensor_parallel(config: Config) -> int:
     gpu_count = config.get_gpu_count()
     if config.vllm_tensor_parallel_size != gpu_count:
         console.print(
@@ -45,33 +80,32 @@ def cmd(name: str, launch_aider: bool):
         )
         console.print(f"Auto-correcting to {gpu_count}")
         config.vllm_tensor_parallel_size = gpu_count
+    return gpu_count
 
-    # Display configuration
-    hourly_cost = config.get_hourly_cost()
+
+def _print_config(config: Config, gpu_count: int, hourly_cost: float):
     console.print("\n[bold]Configuration:[/bold]")
     console.print(f"  Region: {config.region}")
     console.print(f"  Type: {config.type} ({gpu_count} GPUs)")
     console.print(f"  Model: {config.model_id}")
     console.print(f"  Cost: ${hourly_cost:.2f}/hour\n")
 
-    # Initialize managers
-    session_mgr = SessionManager()
-    linode_mgr = LinodeManager(config)
 
-    # Generate session name if not provided
-    if not name:
-        name = session_mgr.generate_session_name(config.model_id)
-
-    console.print(f"Created session: [cyan]{name}[/cyan]\n")
-
-    # Create Linode instance
+def _create_instance_or_exit(linode_mgr: LinodeManager, name: str):
     try:
-        instance = linode_mgr.create_instance(f"llm-{name}")
+        return linode_mgr.create_instance(f"llm-{name}")
     except Exception as e:
         console.print(f"[red]Failed to create VM: {e}[/red]")
         sys.exit(1)
 
-    # Create session
+
+def _create_session(
+    session_mgr: SessionManager,
+    name: str,
+    instance,
+    config: Config,
+    hourly_cost: float,
+):
     session = session_mgr.create_session(
         name=name,
         linode_id=instance.id,
@@ -81,101 +115,90 @@ def cmd(name: str, launch_aider: bool):
         model_id=config.model_id,
         served_model_name=config.served_model_name,
     )
-
-    # Set as current session
-    session_mgr.set_current_session(session)
-
     console.print(f"\n[green]✓[/green] VM created: {instance.ipv4[0]}")
+    return session
+
+
+def _wait_for_ssh_or_exit(ip: str):
     console.print("\n[bold]Waiting for SSH...[/bold] (this may take 10-15 minutes)")
+    if _wait_for_ssh(ip, timeout=1200):
+        console.print("[green]✓[/green] SSH ready")
+        return
+    console.print("[red]✗ SSH timeout[/red]")
+    sys.exit(1)
 
-    # Wait for SSH
-    if not _wait_for_ssh(instance.ipv4[0], timeout=1200):
-        console.print("[red]✗ SSH timeout[/red]")
-        sys.exit(1)
 
-    console.print("[green]✓[/green] SSH ready")
-
-    # Wait for cloud-init
+def _wait_for_cloud_init_or_exit(ip: str):
     console.print("\n[bold]Waiting for cloud-init to complete...[/bold]")
     console.print("[dim]Installing Docker, NVIDIA drivers, and starting containers[/dim]\n")
 
-    if not _wait_for_cloud_init(instance.ipv4[0], timeout=1800):
-        console.print("[red]✗ Cloud-init timeout or failed[/red]")
-        console.print(
-            "Check logs with: ssh root@{} 'cat /var/log/cloud-init-output.log'".format(
-                instance.ipv4[0]
-            )
-        )
-        sys.exit(1)
+    if _wait_for_cloud_init(ip, timeout=1800):
+        console.print("[green]✓[/green] Cloud-init completed successfully")
+        return
 
-    console.print("[green]✓[/green] Cloud-init completed successfully")
+    console.print("[red]✗ Cloud-init timeout or failed[/red]")
+    console.print(f"Check logs with: ssh root@{ip} 'cat /var/log/cloud-init-output.log'")
+    sys.exit(1)
 
-    # Setup SSH tunnel
-    console.print("\n[bold]Setting up SSH tunnel...[/bold]")
-    _setup_ssh_tunnel(instance.ipv4[0], config)
 
-    # Wait for vLLM to be ready
+def _wait_for_vllm_ready(session, config: Config, name: str, ip: str) -> bool:
     console.print("\n[bold]Waiting for vLLM API...[/bold]")
     console.print("[dim]This may take 10-20 minutes while the model downloads and loads[/dim]\n")
 
     vllm_ready = _wait_for_vllm(session.served_model_name, config, timeout=1800)
-
-    if not vllm_ready:
-        console.print("[yellow]⚠ vLLM API timeout - attempting self-healing...[/yellow]")
-
-        # Try self-healing
-        session_dir = Path.home() / ".cache" / "linode-vms" / name
-        if check_and_heal_vllm(instance.ipv4[0], str(session_dir), max_retries=3):
-            console.print("[green]✓[/green] vLLM API is ready after healing!")
-            vllm_ready = True
-        else:
-            console.print("[yellow]⚠ Self-healing failed - model may still be loading[/yellow]")
-            console.print(
-                "Check status with: ssh root@{} 'docker logs -f \\$(docker ps -q)'".format(
-                    instance.ipv4[0]
-                )
-            )
-    else:
-        console.print("[green]✓[/green] vLLM API is ready!")
-
-    # Generate aider metadata if vLLM is ready
     if vllm_ready:
-        _generate_aider_metadata(session.served_model_name, config.vllm_max_model_len)
+        console.print("[green]✓[/green] vLLM API is ready!")
+        return True
 
+    console.print("[yellow]⚠ vLLM API timeout - attempting self-healing...[/yellow]")
+    session_dir = Path.home() / ".cache" / "linode-vms" / name
+    if check_and_heal_vllm(ip, str(session_dir), max_retries=3):
+        console.print("[green]✓[/green] vLLM API is ready after healing!")
+        return True
+
+    console.print("[yellow]⚠ Self-healing failed - model may still be loading[/yellow]")
+    console.print(f"Check status with: ssh root@{ip} 'docker logs -f \\$(docker ps -q)'")
+    return False
+
+
+def _print_access(config: Config, hourly_cost: float):
     console.print("\n[green]✓ Your VM is ready![/green] (${:.2f}/hour)\n".format(hourly_cost))
     console.print("[bold]Access:[/bold]")
     if config.enable_openwebui:
         console.print(f"  • Open WebUI: http://localhost:{config.webui_port}")
     console.print(f"  • vLLM API: http://localhost:{config.vllm_port}/v1\n")
 
-    # Start watchdog if enabled
-    if config.watchdog_enabled:
-        console.print(f"[bold]Starting watchdog...[/bold]")
-        console.print(
-            f"[dim]VM will auto-destroy after {config.watchdog_timeout_minutes} minutes of inactivity[/dim]\n"
+
+def _start_watchdog_if_enabled(session, config: Config):
+    if not config.watchdog_enabled:
+        return
+    console.print("[bold]Starting watchdog...[/bold]")
+    console.print(
+        f"[dim]VM will auto-destroy after {config.watchdog_timeout_minutes} minutes of inactivity[/dim]\n"
+    )
+
+    try:
+        pid = start_watchdog_background(
+            session,
+            timeout_minutes=config.watchdog_timeout_minutes,
+            warning_minutes=config.watchdog_warning_minutes,
         )
+        console.print(f"[green]✓[/green] Watchdog started (PID: {pid})")
+        console.print(f"  • Idle timeout: {config.watchdog_timeout_minutes} minutes")
+        console.print(f"  • Warning: {config.watchdog_warning_minutes} minutes before destruction\n")
+    except Exception as e:
+        console.print(f"[yellow]⚠ Failed to start watchdog: {e}[/yellow]\n")
 
-        try:
-            pid = start_watchdog_background(
-                session,
-                timeout_minutes=config.watchdog_timeout_minutes,
-                warning_minutes=config.watchdog_warning_minutes,
-            )
-            console.print(f"[green]✓[/green] Watchdog started (PID: {pid})")
-            console.print(f"  • Idle timeout: {config.watchdog_timeout_minutes} minutes")
-            console.print(
-                f"  • Warning: {config.watchdog_warning_minutes} minutes before destruction\n"
-            )
-        except Exception as e:
-            console.print(f"[yellow]⚠ Failed to start watchdog: {e}[/yellow]\n")
 
+def _finish_or_launch(session, config: Config, launch_aider: bool):
     if launch_aider:
         _launch_aider_session(session, config)
-    else:
-        console.print("[bold]Next steps:[/bold]")
-        console.print("  source .aider-env")
-        console.print('  aider --model "$AIDER_MODEL"')
-        console.print("\nOr run: coder up --launch-aider to auto-launch next time\n")
+        return
+
+    console.print("[bold]Next steps:[/bold]")
+    console.print("  source .aider-env")
+    console.print('  aider --model "$AIDER_MODEL"')
+    console.print("\nOr run: coder up --launch-aider to auto-launch next time\n")
 
 
 def _wait_for_ssh(ip: str, timeout: int = 1200) -> bool:
@@ -184,10 +207,10 @@ def _wait_for_ssh(ip: str, timeout: int = 1200) -> bool:
 
     with Progress(
         SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
+        TextColumn(PROGRESS_TEXT),
         console=console,
     ) as progress:
-        task = progress.add_task("Waiting for SSH...", total=None)
+        progress.add_task("Waiting for SSH...", total=None)
 
         while time.time() - start < timeout:
             try:
@@ -195,9 +218,9 @@ def _wait_for_ssh(ip: str, timeout: int = 1200) -> bool:
                     [
                         "ssh",
                         "-o",
-                        "ConnectTimeout=5",
+                        SSH_CONNECT_TIMEOUT,
                         "-o",
-                        "StrictHostKeyChecking=no",
+                        SSH_STRICT_HOST_KEY,
                         f"root@{ip}",
                         "echo ready",
                     ],
@@ -231,7 +254,7 @@ def _setup_ssh_tunnel(ip: str, config: Config):
         "-o",
         f"ControlPath={control_path}",
         "-o",
-        "StrictHostKeyChecking=no",
+        SSH_STRICT_HOST_KEY,
         "-L",
         f"{config.vllm_port}:localhost:{config.vllm_port}",
     ]
@@ -250,10 +273,10 @@ def _wait_for_cloud_init(ip: str, timeout: int = 1800) -> bool:
 
     with Progress(
         SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
+        TextColumn(PROGRESS_TEXT),
         console=console,
     ) as progress:
-        task = progress.add_task("Waiting for cloud-init...", total=None)
+        progress.add_task("Waiting for cloud-init...", total=None)
 
         while time.time() - start < timeout:
             try:
@@ -261,9 +284,9 @@ def _wait_for_cloud_init(ip: str, timeout: int = 1800) -> bool:
                     [
                         "ssh",
                         "-o",
-                        "ConnectTimeout=5",
+                        SSH_CONNECT_TIMEOUT,
                         "-o",
-                        "StrictHostKeyChecking=no",
+                        SSH_STRICT_HOST_KEY,
                         f"root@{ip}",
                         "cloud-init status --wait",
                     ],
@@ -273,7 +296,7 @@ def _wait_for_cloud_init(ip: str, timeout: int = 1800) -> bool:
                 if result.returncode == 0:
                     # Check if it completed successfully
                     status_result = subprocess.run(
-                        ["ssh", "-o", "ConnectTimeout=5", f"root@{ip}", "cloud-init status"],
+                        ["ssh", "-o", SSH_CONNECT_TIMEOUT, f"root@{ip}", "cloud-init status"],
                         capture_output=True,
                         text=True,
                     )
@@ -296,10 +319,10 @@ def _wait_for_vllm(model_name: str, config: Config, timeout: int = 1800) -> bool
 
     with Progress(
         SpinnerColumn(),
-        TextColumn("[progress.description]{task.description}"),
+        TextColumn(PROGRESS_TEXT),
         console=console,
     ) as progress:
-        task = progress.add_task("Waiting for vLLM...", total=None)
+        progress.add_task("Waiting for vLLM...", total=None)
 
         while time.time() - start < timeout:
             try:

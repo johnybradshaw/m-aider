@@ -204,36 +204,48 @@ def select_models_for_vram(vram_gb: int) -> List[ModelConfig]:
     if not all_suitable:
         return []
 
-    # Group by category
-    by_category: dict[str, List[ModelConfig]] = {}
-    for model in all_suitable:
-        if model.category not in by_category:
-            by_category[model.category] = []
-        by_category[model.category].append(model)
-
-    # Select top model from largest category that fits
-    selected = []
-
-    # Priority: largest category first
+    by_category = _group_models_by_category(all_suitable)
     category_order = ["70b", "30b", "14b", "7b"]
-    for cat in category_order:
-        if cat in by_category:
-            # Get top quantized model from this category
-            quantized = [m for m in by_category[cat] if m.quantization in ["awq", "gptq"]]
-            if quantized:
-                selected.append(quantized[0])
-                break
+    selected = _select_primary_quantized(by_category, category_order)
 
-    # If we have room for more, add the best full-precision model
-    if len(selected) < 3 and vram_gb >= 80:
-        for cat in category_order:
-            if cat in by_category:
-                full = [m for m in by_category[cat] if m.quantization == "full"]
-                if full and full[0] not in selected:
-                    selected.append(full[0])
-                    break
+    if vram_gb >= 80:
+        _append_full_precision(by_category, category_order, selected)
 
     return selected[:3]  # Maximum 3 models
+
+
+def _group_models_by_category(models: List[ModelConfig]) -> dict[str, List[ModelConfig]]:
+    by_category: dict[str, List[ModelConfig]] = {}
+    for model in models:
+        by_category.setdefault(model.category, []).append(model)
+    return by_category
+
+
+def _select_primary_quantized(
+    by_category: dict[str, List[ModelConfig]],
+    category_order: list[str],
+) -> list[ModelConfig]:
+    for category in category_order:
+        candidates = by_category.get(category, [])
+        quantized = [m for m in candidates if m.quantization in ["awq", "gptq"]]
+        if quantized:
+            return [quantized[0]]
+    return []
+
+
+def _append_full_precision(
+    by_category: dict[str, List[ModelConfig]],
+    category_order: list[str],
+    selected: list[ModelConfig],
+) -> None:
+    if len(selected) >= 3:
+        return
+    for category in category_order:
+        candidates = by_category.get(category, [])
+        full_precision = [m for m in candidates if m.quantization == "full"]
+        if full_precision and full_precision[0] not in selected:
+            selected.append(full_precision[0])
+            return
 
 
 def estimate_vram_usage(model_category: str, quantization: str) -> int:

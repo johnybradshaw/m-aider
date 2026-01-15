@@ -22,83 +22,91 @@ def cmd(session_name: str, force: bool):
 
     SESSION_NAME: Name of session to destroy (current session if not specified)
     """
-    # Load configuration
     config = Config()
-
-    # Initialize managers
     session_mgr = SessionManager()
     linode_mgr = LinodeManager(config)
 
-    # Get session
+    session = _get_session_or_exit(session_mgr, session_name)
+    _require_token_or_exit(config, session)
+    _confirm_destroy(session, force)
+    _close_ssh_tunnel(session)
+    _delete_linode(linode_mgr, session)
+    _print_summary(session)
+    session_mgr.delete_session(session.name)
+    console.print(f"\n[green]✓[/green] Session '{session.name}' destroyed")
+
+
+def _get_session_or_exit(session_mgr: SessionManager, session_name: str):
     if session_name:
         session = session_mgr.get_session(session_name)
         if not session:
             console.print(f"[red]Session '{session_name}' not found[/red]")
             sys.exit(1)
-    else:
-        session = session_mgr.get_current_session()
-        if not session:
-            # No current session - try to auto-detect if there's only one running
-            sessions = session_mgr.list_sessions()
-            if len(sessions) == 0:
-                console.print("[red]No sessions found[/red]")
-                sys.exit(1)
-            elif len(sessions) == 1:
-                # Only one session - use it
-                session = sessions[0]
-                console.print(
-                    f"[yellow]No current session set, using only session: {session.name}[/yellow]"
-                )
-            else:
-                # Multiple sessions - ask user to specify
-                console.print("[red]No current session set and multiple sessions exist[/red]")
-                console.print("\nAvailable sessions:")
-                for s in sessions:
-                    console.print(f"  • {s.name}")
-                console.print("\nRun: [cyan]coder down <session-name>[/cyan]")
-                console.print(
-                    "Or:  [cyan]coder use <session-name>[/cyan] first, then [cyan]coder down[/cyan]"
-                )
-                sys.exit(1)
+        return session
 
-    # Validate API token is available before proceeding
-    if not config.linode_token:
-        console.print("[red]✗ Cannot destroy VM: Missing Linode API token[/red]\n")
-        console.print(
-            "[bold]The VM is still running but cannot be deleted without an API token.[/bold]\n"
-        )
-        console.print("[bold]Options:[/bold]")
-        console.print("  1. Set LINODE_TOKEN in your environment:")
-        console.print("     export LINODE_TOKEN=your_token_here")
-        console.print("     coder down {}\n".format(session.name))
-        console.print("  2. Manually delete the Linode from the web dashboard:")
-        console.print("     https://cloud.linode.com/linodes/{}\n".format(session.linode_id))
-        console.print(
-            "  3. Then run: [cyan]coder cleanup --session {} --force[/cyan] to remove local state\n".format(
-                session.name
-            )
-        )
-        console.print(
-            "[yellow]⚠ VM {}/{} is still running and will continue to cost ${:.2f}/hour![/yellow]".format(
-                session.linode_id, session.ip, session.hourly_cost
-            )
-        )
+    session = session_mgr.get_current_session()
+    if session:
+        return session
+
+    sessions = session_mgr.list_sessions()
+    if len(sessions) == 0:
+        console.print("[red]No sessions found[/red]")
         sys.exit(1)
+    if len(sessions) == 1:
+        session = sessions[0]
+        console.print(f"[yellow]No current session set, using only session: {session.name}[/yellow]")
+        return session
 
-    # Confirm destruction
-    if not force:
-        console.print(f"\n[bold]Session: {session.name}[/bold]")
-        console.print(f"  Linode ID: {session.linode_id}")
-        console.print(f"  IP: {session.ip}")
-        console.print(f"  Runtime: {session.runtime_hours:.2f} hours")
-        console.print(f"  Cost: ${session.total_cost:.2f}\n")
+    console.print("[red]No current session set and multiple sessions exist[/red]")
+    console.print("\nAvailable sessions:")
+    for s in sessions:
+        console.print(f"  • {s.name}")
+    console.print("\nRun: [cyan]coder down <session-name>[/cyan]")
+    console.print("Or:  [cyan]coder use <session-name>[/cyan] first, then [cyan]coder down[/cyan]")
+    sys.exit(1)
 
-        response = input("Destroy this VM? [y/N]: ")
-        if response.lower() != "y":
-            console.print("Cancelled")
-            sys.exit(0)
 
-    # Close SSH tunnel
+def _require_token_or_exit(config: Config, session):
+    if config.linode_token:
+        return
+
+    console.print("[red]✗ Cannot destroy VM: Missing Linode API token[/red]\n")
+    console.print(
+        "[bold]The VM is still running but cannot be deleted without an API token.[/bold]\n"
+    )
+    console.print("[bold]Options:[/bold]")
+    console.print("  1. Set LINODE_TOKEN in your environment:")
+    console.print("     export LINODE_TOKEN=your_token_here")
+    console.print(f"     coder down {session.name}\n")
+    console.print("  2. Manually delete the Linode from the web dashboard:")
+    console.print(f"     https://cloud.linode.com/linodes/{session.linode_id}\n")
+    console.print(
+        f"  3. Then run: [cyan]coder cleanup --session {session.name} --force[/cyan] to remove local state\n"
+    )
+    console.print(
+        "[yellow]⚠ VM {}/{} is still running and will continue to cost ${:.2f}/hour![/yellow]".format(
+            session.linode_id, session.ip, session.hourly_cost
+        )
+    )
+    sys.exit(1)
+
+
+def _confirm_destroy(session, force: bool):
+    if force:
+        return
+    console.print(f"\n[bold]Session: {session.name}[/bold]")
+    console.print(f"  Linode ID: {session.linode_id}")
+    console.print(f"  IP: {session.ip}")
+    console.print(f"  Runtime: {session.runtime_hours:.2f} hours")
+    console.print(f"  Cost: ${session.total_cost:.2f}\n")
+
+    response = input("Destroy this VM? [y/N]: ")
+    if response.lower() != "y":
+        console.print("Cancelled")
+        sys.exit(0)
+
+
+def _close_ssh_tunnel(session):
     console.print("\n[bold]Cleaning up SSH tunnel...[/bold]")
     control_path = Path.home() / ".ssh" / f"llm-master-root@{session.ip}"
     subprocess.run(
@@ -106,7 +114,8 @@ def cmd(session_name: str, force: bool):
         capture_output=True,
     )
 
-    # Delete Linode
+
+def _delete_linode(linode_mgr: LinodeManager, session):
     console.print("[bold]Destroying VM...[/bold]")
     try:
         instance = linode_mgr.get_instance(session.linode_id)
@@ -121,27 +130,21 @@ def cmd(session_name: str, force: bool):
         console.print(f"[red]✗ Failed to delete Linode {session.linode_id}: {e}[/red]\n")
         console.print("[bold]The VM may still be running![/bold]\n")
         console.print("[bold]Options:[/bold]")
-        console.print("  1. Check if VM still exists: coder status {}".format(session.name))
-        console.print("  2. Try again: coder down {}".format(session.name))
+        console.print(f"  1. Check if VM still exists: coder status {session.name}")
+        console.print(f"  2. Try again: coder down {session.name}")
         console.print("  3. Manually delete from web dashboard:")
-        console.print("     https://cloud.linode.com/linodes/{}\n".format(session.linode_id))
+        console.print(f"     https://cloud.linode.com/linodes/{session.linode_id}\n")
         console.print(
-            "  4. Then run: [cyan]coder cleanup --session {} --force[/cyan] to remove local state\n".format(
-                session.name
-            )
+            f"  4. Then run: [cyan]coder cleanup --session {session.name} --force[/cyan] to remove local state\n"
         )
         console.print("[yellow]Local session state has NOT been deleted.[/yellow]")
         sys.exit(1)
 
-    # Show cost summary
+
+def _print_summary(session):
     console.print("\n[bold]Session Summary:[/bold]")
     console.print("═" * 50)
     console.print(f"  Runtime: {session.runtime_hours:.2f} hours")
     console.print(f"  Hourly rate: ${session.hourly_cost:.2f}")
     console.print(f"  Total cost: ${session.total_cost:.2f}")
     console.print("═" * 50)
-
-    # Delete session
-    session_mgr.delete_session(session.name)
-
-    console.print(f"\n[green]✓[/green] Session '{session.name}' destroyed")

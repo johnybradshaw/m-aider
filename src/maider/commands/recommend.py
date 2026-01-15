@@ -15,6 +15,7 @@ from ..recommendations import (
 )
 
 console = Console()
+CHOICE_PROMPT = "\nChoice"
 
 
 @click.command(name="recommend")
@@ -67,7 +68,7 @@ def cmd():
     for i, choice in enumerate(task_choices, 1):
         console.print(f"  {i}) {choice}")
 
-    task_idx = int(Prompt.ask("\nChoice", choices=["1", "2", "3", "4"], default="1")) - 1
+    task_idx = int(Prompt.ask(CHOICE_PROMPT, choices=["1", "2", "3", "4"], default="1")) - 1
 
     task_type_map = [
         TaskType.CODING,
@@ -89,7 +90,7 @@ def cmd():
     for i, choice in enumerate(budget_choices, 1):
         console.print(f"  {i}) {choice}")
 
-    budget_idx = int(Prompt.ask("\nChoice", choices=["1", "2", "3", "4"], default="2")) - 1
+    budget_idx = int(Prompt.ask(CHOICE_PROMPT, choices=["1", "2", "3", "4"], default="2")) - 1
 
     budget_map = [
         BudgetConstraint.UNDER_1,
@@ -110,7 +111,7 @@ def cmd():
     for i, choice in enumerate(size_choices, 1):
         console.print(f"  {i}) {choice}")
 
-    size_idx = int(Prompt.ask("\nChoice", choices=["1", "2", "3"], default="2")) - 1
+    size_idx = int(Prompt.ask(CHOICE_PROMPT, choices=["1", "2", "3"], default="2")) - 1
 
     size_map = [
         ModelSizePreference.SMALLEST_VIABLE,
