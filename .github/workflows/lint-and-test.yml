@@ -145,7 +145,7 @@ jobs:
 
       - name: Check README references Python CLI
         run: |
-          if ! grep -q "coder wizard" README.md; then
+          if ! grep -q "maider wizard" README.md; then
             echo "Error: README.md should reference Python CLI commands"
             exit 1
           fi
@@ -260,12 +260,12 @@ jobs:
 
       - name: Test CLI help commands
         run: |
-          coder --help | grep -q "Usage:" || exit 1
-          coder validate --help | grep -q "Validate configuration" || exit 1
-          coder wizard --help | grep -q "Interactive setup wizard" || exit 1
+          maider --help | grep -q "Usage:" || exit 1
+          maider validate --help | grep -q "Validate configuration" || exit 1
+          maider wizard --help | grep -q "Interactive setup wizard" || exit 1
           echo "✓ CLI help commands work"
 
       - name: Test CLI version/info
         run: |
-          coder --version || echo "Note: --version may not be implemented yet"
+          maider --version || echo "Note: --version may not be implemented yet"
           echo "✓ CLI installed successfully"
