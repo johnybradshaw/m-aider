@@ -203,8 +203,7 @@ def _choose_region():
         console.print(f"  {i}) {region_id} - {region_name}")
 
     region_idx = (
-        int(Prompt.ask(CHOICE_PROMPT, choices=[str(i) for i in range(1, len(regions) + 1)]))
-        - 1
+        int(Prompt.ask(CHOICE_PROMPT, choices=[str(i) for i in range(1, len(regions) + 1)])) - 1
     )
     return regions[region_idx][0]
 
@@ -344,9 +343,7 @@ def _print_summary(
     console.print(f"  Served as:    {served_name}")
     console.print(f"  Context:      {context_length} tokens")
     console.print(f"  Profile:      {profile_choice} ({profile['label']})")
-    console.print(
-        f"  Open WebUI:   {'Yes' if deployment_options['enable_openwebui'] else 'No'}"
-    )
+    console.print(f"  Open WebUI:   {'Yes' if deployment_options['enable_openwebui'] else 'No'}")
     console.print(f"  HF Cache:     {'Yes' if deployment_options['enable_hf_cache'] else 'No'}")
     console.print(
         f"  Healthchecks:{' Yes' if deployment_options['enable_healthchecks'] else ' No'}"

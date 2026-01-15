@@ -54,7 +54,9 @@ def _get_session_or_exit(session_mgr: SessionManager, session_name: str):
         sys.exit(1)
     if len(sessions) == 1:
         session = sessions[0]
-        console.print(f"[yellow]No current session set, using only session: {session.name}[/yellow]")
+        console.print(
+            f"[yellow]No current session set, using only session: {session.name}[/yellow]"
+        )
         return session
 
     console.print("[red]No current session set and multiple sessions exist[/red]")

@@ -185,7 +185,9 @@ def _start_watchdog_if_enabled(session, config: Config):
         )
         console.print(f"[green]✓[/green] Watchdog started (PID: {pid})")
         console.print(f"  • Idle timeout: {config.watchdog_timeout_minutes} minutes")
-        console.print(f"  • Warning: {config.watchdog_warning_minutes} minutes before destruction\n")
+        console.print(
+            f"  • Warning: {config.watchdog_warning_minutes} minutes before destruction\n"
+        )
     except Exception as e:
         console.print(f"[yellow]⚠ Failed to start watchdog: {e}[/yellow]\n")
 
