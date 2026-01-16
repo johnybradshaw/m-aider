@@ -16,6 +16,7 @@
 - `maider up --launch-aider` / `maider down`: create and destroy VMs.
 - `pytest`: run the test suite (see markers below).
 - `ruff check .` and `black .`: lint and format (use before PRs).
+  - Before committing, run `pytest` and `black .`, and resolve any failures or formatting issues.
 
 ## Coding Style & Naming Conventions
 - Python code uses 4-space indentation and Black formatting (line length 100).

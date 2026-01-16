@@ -105,7 +105,10 @@ class CliRunner:
         bound_positionals: list[Any] = []
         remaining_positionals = list(positionals)
         for param in parameters.values():
-            if param.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD):
+            if param.kind in (
+                inspect.Parameter.POSITIONAL_ONLY,
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            ):
                 if param.name in kwargs:
                     continue
                 if remaining_positionals:
