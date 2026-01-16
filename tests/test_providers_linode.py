@@ -531,7 +531,7 @@ class TestLinodeProviderCoverage:
         details = provider._build_type_details(api_type, gpu_regions)
 
         assert details["gpus"] == 2
-        assert details["hourly_cost"] == 3.0
+        assert details["hourly_cost"] == pytest.approx(3.0)
         assert details["regions"] == {"us-east"}
 
     def test_build_type_details_missing_gpu(self, provider):
