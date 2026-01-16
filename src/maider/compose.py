@@ -105,7 +105,7 @@ def _vllm_command_args(runtime: ComposeRuntime) -> list[str]:
 
 
 def _yaml_quote(value: str) -> str:
-    return value.replace('\\', '\\\\').replace('"', '\\"')
+    return value.replace("\\", "\\\\").replace('"', '\\"')
 
 
 def _vllm_healthcheck() -> str:
