@@ -11,7 +11,7 @@
 
 This document describes the multi-card GPU support for running large language models that require more VRAM than a single GPU can provide. The launcher supports vLLM's tensor parallelism feature, which distributes model layers across multiple GPUs.
 
-- **Python CLI (`maider`)** - **Recommended** - Modern, maintainable, handles Linode API changes automatically- 
+- **Python CLI (`maider`)** - **Recommended** - Modern, maintainable, handles Linode API changes automatically-
 
 ## Recent Major Updates (2026-01)
 

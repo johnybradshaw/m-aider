@@ -2,7 +2,7 @@
 
 import pytest
 from types import SimpleNamespace
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 from src.maider.providers.linode import (
     LinodeProvider,
     GPU_REGIONS,

@@ -13,7 +13,7 @@ from rich.table import Table
 
 from ..session import SessionManager
 from ..benchmark_db import BenchmarkDatabase
-from ..benchmark_models import get_model_category, get_quantization_type
+from ..benchmark_models import get_model_category
 from ..providers.linode import GPU_TYPES
 
 console = Console()

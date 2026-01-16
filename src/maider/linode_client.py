@@ -4,10 +4,8 @@ This module provides backward compatibility by wrapping the new
 provider abstraction layer.
 """
 
-import base64
 import secrets
 import string
-import subprocess
 from pathlib import Path
 from typing import Optional
 
@@ -16,7 +14,6 @@ from rich.console import Console
 
 from .config import Config
 from .providers.linode import LinodeProvider
-from .providers.base import VMInstance
 
 console = Console()
 

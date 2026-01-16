@@ -4,7 +4,6 @@ import base64
 import secrets
 import string
 import time
-from pathlib import Path
 from typing import List, Optional, Dict, Any, Set
 
 from linode_api4 import LinodeClient, Instance
