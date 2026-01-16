@@ -181,14 +181,29 @@ def _upload_temp_file(content: str, suffix: str, remote_path: str):
 
 def _restart_containers(ip: str):
     console.print("[bold]Restarting containers...[/bold]")
-    result = subprocess.run(
-        ["ssh", f"root@{ip}", "cd /opt/llm && docker compose down && docker compose up -d"],
-        capture_output=True,
-        text=True,
-    )
-    if result.returncode != 0:
-        console.print(f"[red]Failed to restart: {result.stderr}[/red]")
-        sys.exit(1)
+    try:
+        result = subprocess.run(
+            ["ssh", f"root@{ip}", "cd /opt/llm && docker compose down && docker compose up -d"],
+            capture_output=True,
+            text=True,
+            timeout=120,
+        )
+        if result.returncode != 0:
+            console.print(f"[red]Failed to restart: {result.stderr}[/red]")
+            sys.exit(1)
+    except subprocess.TimeoutExpired:
+        console.print(
+            "[yellow]⚠ docker compose restart timed out; falling back to systemctl[/yellow]"
+        )
+        result = subprocess.run(
+            ["ssh", f"root@{ip}", "systemctl restart vllm"],
+            capture_output=True,
+            text=True,
+            timeout=60,
+        )
+        if result.returncode != 0:
+            console.print(f"[red]Failed to restart via systemctl: {result.stderr}[/red]")
+            sys.exit(1)
 
 
 def _wait_for_api(ip: str, runtime: ComposeRuntime):
