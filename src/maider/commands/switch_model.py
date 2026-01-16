@@ -73,7 +73,7 @@ def _get_session_or_exit(session_mgr: SessionManager, session_name: str | None):
     session = session_mgr.get_current_session()
     if not session:
         console.print("[red]No current session set[/red]")
-        console.print("Run: [cyan]coder use <session>[/cyan]")
+        console.print("Run: [cyan]maider use <session>[/cyan]")
         sys.exit(1)
     return session
 
