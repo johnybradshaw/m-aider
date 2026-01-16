@@ -2,7 +2,7 @@
 
 import pytest
 from types import SimpleNamespace
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 from src.maider.providers.linode import (
     LinodeProvider,
     GPU_REGIONS,
@@ -100,9 +100,9 @@ class TestLinodeProviderConstants:
     def test_region_metadata_covers_gpu_regions(self):
         """Test that REGION_METADATA covers all GPU regions."""
         for region_id in GPU_REGIONS:
-            assert (
-                region_id in REGION_METADATA
-            ), f"GPU region {region_id} missing from REGION_METADATA"
+            assert region_id in REGION_METADATA, (
+                f"GPU region {region_id} missing from REGION_METADATA"
+            )
 
     def test_region_metadata_format(self):
         """Test that region metadata has correct format."""

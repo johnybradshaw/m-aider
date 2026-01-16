@@ -1,7 +1,6 @@
 """Remove stale VM sessions."""
 
 import shutil
-from pathlib import Path
 
 import click
 from rich.console import Console

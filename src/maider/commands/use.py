@@ -1,7 +1,6 @@
 """Switch to a different VM session."""
 
 import sys
-from pathlib import Path
 
 import click
 from rich.console import Console

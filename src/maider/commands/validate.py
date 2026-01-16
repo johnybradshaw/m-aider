@@ -5,7 +5,7 @@ import click
 from rich.console import Console
 
 from ..config import Config
-from ..providers.base import CloudProviderFactory, ProviderType
+from ..providers.base import ProviderType
 
 console = Console()
 

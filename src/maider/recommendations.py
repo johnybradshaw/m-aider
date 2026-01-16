@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass
 from enum import Enum
-from typing import List, Optional, Dict, Any
+from typing import List, Optional, Dict
 
 from .benchmark_db import BenchmarkDatabase, BenchmarkResult
 

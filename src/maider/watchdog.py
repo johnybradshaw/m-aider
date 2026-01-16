@@ -2,7 +2,7 @@
 
 import time
 import subprocess
-from datetime import datetime, timedelta
+from datetime import datetime
 from pathlib import Path
 
 from .session import SessionManager, Session

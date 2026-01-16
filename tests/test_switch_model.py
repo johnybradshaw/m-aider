@@ -2,8 +2,7 @@
 
 import json
 import subprocess
-from pathlib import Path
-from unittest.mock import Mock, patch, MagicMock
+from unittest.mock import Mock, patch
 
 import pytest
 from click.testing import CliRunner

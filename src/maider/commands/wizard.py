@@ -378,10 +378,10 @@ SERVED_MODEL_NAME={served_name}
 # vLLM Configuration
 VLLM_TENSOR_PARALLEL_SIZE={tensor_parallel_size}
 VLLM_MAX_MODEL_LEN={context_length}
-VLLM_GPU_MEMORY_UTILIZATION={profile['gpu_util']}
-VLLM_MAX_NUM_SEQS={profile['max_num_seqs']}
+VLLM_GPU_MEMORY_UTILIZATION={profile["gpu_util"]}
+VLLM_MAX_NUM_SEQS={profile["max_num_seqs"]}
 VLLM_DTYPE=auto
-VLLM_EXTRA_ARGS={profile['extra_args']}
+VLLM_EXTRA_ARGS={profile["extra_args"]}
 
 # Deployment Options
 PERF_PROFILE={profile_choice}

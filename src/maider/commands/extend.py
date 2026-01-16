@@ -2,7 +2,6 @@
 
 import sys
 import time
-from pathlib import Path
 
 import click
 from rich.console import Console
