@@ -47,7 +47,7 @@ def _get_session_or_exit(session_mgr: SessionManager, session_name: str):
     session = session_mgr.get_current_session()
     if not session:
         console.print("[red]No current session found[/red]")
-        console.print("Run 'coder up' first or specify a session name")
+        console.print("Run 'maider up' first or specify a session name")
         sys.exit(1)
     return session
 
@@ -109,7 +109,7 @@ def _print_tensor_parallel_status(gpu_monitor: GPUMonitor):
     else:
         console.print(f"  [red]✗[/red] {message}")
         console.print("     → Tensor parallelism may not be configured correctly")
-        console.print("     → Run: coder validate-perf for detailed analysis")
+        console.print("     → Run: maider validate-perf for detailed analysis")
 
     console.print()
 
@@ -152,5 +152,5 @@ def _run_throughput_test(session):
 def _print_footer():
     console.print()
     console.print("[bold]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[/bold]")
-    console.print("For detailed performance analysis: [cyan]coder validate-perf[/cyan]")
+    console.print("For detailed performance analysis: [cyan]maider validate-perf[/cyan]")
     console.print("[bold]━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━[/bold]\n")
