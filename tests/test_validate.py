@@ -1,6 +1,5 @@
 """Tests for validate command."""
 
-
 import pytest
 from click.testing import CliRunner
 

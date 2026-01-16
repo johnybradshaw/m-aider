@@ -1,6 +1,5 @@
 """Tests for benchmark model selection."""
 
-
 from src.maider.benchmark_models import (
     get_recommended_models,
     get_model_category,
