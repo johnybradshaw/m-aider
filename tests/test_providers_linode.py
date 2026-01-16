@@ -1,6 +1,7 @@
 """Tests for Linode provider implementation."""
 
 import pytest
+from types import SimpleNamespace
 from unittest.mock import Mock, patch, MagicMock
 from src.maider.providers.linode import (
     LinodeProvider,
@@ -405,3 +406,231 @@ class TestLinodeProviderFactoryRegistration:
 
             assert isinstance(provider, LinodeProvider)
             assert provider.get_provider_type() == ProviderType.LINODE
+
+
+@pytest.mark.unit
+class TestLinodeProviderCoverage:
+    """Ensure full coverage of LinodeProvider helper paths."""
+
+    @pytest.fixture
+    def provider(self):
+        with patch("src.maider.providers.linode.LinodeClient"):
+            return LinodeProvider(api_token="test-token")
+
+    @pytest.fixture
+    def reset_type_cache(self, monkeypatch):
+        from src.maider.providers import linode as linode_mod
+
+        monkeypatch.setattr(linode_mod, "_type_cache", {})
+        monkeypatch.setattr(linode_mod, "_type_cache_timestamp", 0.0)
+        return linode_mod
+
+    def test_fetch_types_uses_cache(self, provider, reset_type_cache, monkeypatch):
+        reset_type_cache._type_cache = {"cached": {"gpus": 1}}
+        monkeypatch.setattr(reset_type_cache.time, "time", lambda: 100.0)
+        reset_type_cache._type_cache_timestamp = 100.0
+
+        result = provider._fetch_types_from_api()
+
+        assert result == {"cached": {"gpus": 1}}
+
+    @patch("src.maider.providers.linode.LinodeClient")
+    def test_fetch_types_force_refresh(self, mock_client_class, reset_type_cache):
+        api_type = SimpleNamespace(
+            id="g1-gpu-rtx6000-1",
+            label="Dedicated 48GB + RTX6000 GPU x1",
+            gpus=1,
+            price=SimpleNamespace(hourly=1.5),
+        )
+        mock_client = Mock()
+        mock_client.linode.types.return_value = [api_type]
+        mock_client_class.return_value = mock_client
+
+        provider = LinodeProvider(api_token="test-token")
+        result = provider._fetch_types_from_api(force_refresh=True)
+
+        assert "g1-gpu-rtx6000-1" in result
+
+    @patch("src.maider.providers.linode.LinodeClient")
+    def test_fetch_types_fallback_on_empty(self, mock_client_class, reset_type_cache):
+        api_type = SimpleNamespace(id="cpu-only", label="CPU only")
+        mock_client = Mock()
+        mock_client.linode.types.return_value = [api_type]
+        mock_client_class.return_value = mock_client
+
+        provider = LinodeProvider(api_token="test-token")
+        result = provider._fetch_types_from_api(force_refresh=True)
+
+        assert result == provider._get_hardcoded_gpu_types()
+
+    @patch("src.maider.providers.linode.LinodeClient")
+    def test_fetch_types_fallback_on_exception(self, mock_client_class, reset_type_cache):
+        mock_client = Mock()
+        mock_client.linode.types.side_effect = Exception("boom")
+        mock_client_class.return_value = mock_client
+
+        provider = LinodeProvider(api_token="test-token")
+        result = provider._fetch_types_from_api(force_refresh=True)
+
+        assert result == provider._get_hardcoded_gpu_types()
+
+    @patch("src.maider.providers.linode.LinodeClient")
+    def test_fetch_gpu_regions_from_api(self, mock_client_class):
+        region_4000 = SimpleNamespace(
+            id="us-ord",
+            capabilities=["GPU Linodes"],
+        )
+        region_6000 = SimpleNamespace(
+            id="us-east",
+            capabilities=["GPU Linodes"],
+        )
+        region_cpu = SimpleNamespace(id="us-west", capabilities=[])
+        mock_client = Mock()
+        mock_client.regions.return_value = [region_4000, region_6000, region_cpu]
+        mock_client_class.return_value = mock_client
+
+        provider = LinodeProvider(api_token="test-token")
+        regions = provider._fetch_gpu_regions()
+
+        assert "us-ord" in regions["rtx4000"]
+        assert "us-east" in regions["rtx6000"]
+
+    @patch("src.maider.providers.linode.LinodeClient")
+    def test_fetch_gpu_regions_fallback_when_empty(self, mock_client_class):
+        mock_client = Mock()
+        mock_client.regions.return_value = [SimpleNamespace(id="us-west", capabilities=[])]
+        mock_client_class.return_value = mock_client
+
+        provider = LinodeProvider(api_token="test-token")
+        regions = provider._fetch_gpu_regions()
+
+        assert regions["rtx4000"] == GPU_TYPES["g2-gpu-rtx4000a1-s"]["regions"]
+        assert regions["rtx6000"] == GPU_TYPES["g1-gpu-rtx6000-1"]["regions"]
+
+    @patch("src.maider.providers.linode.LinodeClient")
+    def test_fetch_gpu_regions_exception(self, mock_client_class):
+        mock_client = Mock()
+        mock_client.regions.side_effect = Exception("nope")
+        mock_client_class.return_value = mock_client
+
+        provider = LinodeProvider(api_token="test-token")
+        regions = provider._fetch_gpu_regions()
+
+        assert regions["rtx4000"] == GPU_TYPES["g2-gpu-rtx4000a1-s"]["regions"]
+        assert regions["rtx6000"] == GPU_TYPES["g1-gpu-rtx6000-1"]["regions"]
+
+    def test_build_type_details_with_price(self, provider):
+        api_type = SimpleNamespace(
+            id="g1-gpu-rtx6000-2",
+            label="Dedicated 96GB + RTX6000 GPU x2",
+            gpus=2,
+            price=SimpleNamespace(hourly=3.0),
+        )
+        gpu_regions = {"rtx6000": {"us-east"}, "rtx4000": set()}
+
+        details = provider._build_type_details(api_type, gpu_regions)
+
+        assert details["gpus"] == 2
+        assert details["hourly_cost"] == 3.0
+        assert details["regions"] == {"us-east"}
+
+    def test_build_type_details_missing_gpu(self, provider):
+        api_type = SimpleNamespace(id="cpu-only", label="CPU only", gpus=0)
+        assert provider._build_type_details(api_type, {}) is None
+
+    def test_regions_for_type(self):
+        gpu_regions = {"rtx4000": {"us-ord"}, "rtx6000": {"us-east"}}
+        assert LinodeProvider._regions_for_type("g2-gpu-rtx4000a1-s", gpu_regions) == {"us-ord"}
+        assert LinodeProvider._regions_for_type("g1-gpu-rtx6000-1", gpu_regions) == {"us-east"}
+        assert LinodeProvider._regions_for_type("unknown", gpu_regions) == {"us-ord", "us-east"}
+
+    def test_extract_gpu_name_from_label(self):
+        assert LinodeProvider._extract_gpu_name_from_label("RTX6000 GPU", "any") == "RTX 6000 Ada"
+        assert LinodeProvider._extract_gpu_name_from_label("RTX4000 GPU", "any") == "RTX 4000 Ada"
+        assert LinodeProvider._extract_gpu_name_from_label("V100", "any") == "Tesla V100"
+        assert LinodeProvider._extract_gpu_name_from_label("A100", "any") == "A100"
+        assert (
+            LinodeProvider._extract_gpu_name_from_label("something", "g1-gpu-rtx6000-1")
+            == "RTX 6000 Ada"
+        )
+        assert (
+            LinodeProvider._extract_gpu_name_from_label("something", "g2-gpu-rtx4000a1-s")
+            == "RTX 4000 Ada"
+        )
+        assert LinodeProvider._extract_gpu_name_from_label("something", "unknown") == "GPU"
+
+    def test_extract_vram_from_gpu_type(self):
+        assert LinodeProvider._extract_vram_from_gpu_type("RTX 6000 Ada", "label") == 48
+        assert LinodeProvider._extract_vram_from_gpu_type("RTX 4000 Ada", "label") == 20
+        assert LinodeProvider._extract_vram_from_gpu_type("Other", "2x 96GB") == 48
+        assert LinodeProvider._extract_vram_from_gpu_type("Other", "No GB") == 24
+
+    def test_vram_from_label_and_gpu_count(self):
+        assert LinodeProvider._vram_from_label("2x 96GB") == 48
+        assert LinodeProvider._vram_from_label("96GB") == 96
+        assert LinodeProvider._vram_from_label("GB") is None
+        assert LinodeProvider._vram_from_label("No memory listed") is None
+
+    def test_gpu_count_from_label(self):
+        assert LinodeProvider._gpu_count_from_label("2x") == 2
+        assert LinodeProvider._gpu_count_from_label("Dual GPU") == 2
+        assert LinodeProvider._gpu_count_from_label("4x") == 4
+        assert LinodeProvider._gpu_count_from_label("Quad GPU") == 4
+        assert LinodeProvider._gpu_count_from_label("8x") == 8
+        assert LinodeProvider._gpu_count_from_label("Octo GPU") == 8
+        assert LinodeProvider._gpu_count_from_label("Single") == 1
+
+    def test_get_hardcoded_gpu_types(self):
+        types = LinodeProvider._get_hardcoded_gpu_types()
+        assert types["g1-gpu-rtx6000-1"]["gpu_name"] == "RTX 6000 Ada"
+        assert types["g2-gpu-rtx4000a1-s"]["gpu_name"] == "RTX 4000 Ada"
+        assert types["g1-gpu-rtx6000-1"]["label"] == "1x GPU"
+
+    def test_list_vm_types_gpu_only_false(self, provider):
+        assert provider.list_vm_types(gpu_only=False) == []
+
+    @patch("src.maider.providers.linode.LinodeClient")
+    def test_list_regions_fallback_on_exception(self, mock_client_class):
+        mock_client = Mock()
+        mock_client.regions.side_effect = Exception("bad")
+        mock_client_class.return_value = mock_client
+
+        provider = LinodeProvider(api_token="test-token")
+        regions = provider.list_regions(gpu_capable_only=False)
+
+        assert all(region.gpu_available for region in regions)
+
+    @patch("src.maider.providers.linode.LinodeClient")
+    def test_create_instance_raises_on_failure(self, mock_client_class):
+        mock_client = Mock()
+        mock_client.linode.instance_create.side_effect = Exception("fail")
+        mock_client_class.return_value = mock_client
+
+        provider = LinodeProvider(api_token="test-token")
+        with pytest.raises(Exception):
+            provider.create_instance(
+                region="us-east",
+                vm_type="g1-gpu-rtx6000-1",
+                label="test",
+                ssh_key="ssh-key",
+                cloud_init_config="config",
+            )
+
+    @patch("src.maider.providers.linode.LinodeClient")
+    def test_delete_instance_invalid_id(self, mock_client_class):
+        mock_client_class.return_value = Mock()
+        provider = LinodeProvider(api_token="test-token")
+
+        assert provider.delete_instance("not-an-int") is False
+
+    @patch("src.maider.providers.linode.LinodeClient")
+    def test_get_instance_status_invalid_id(self, mock_client_class):
+        mock_client_class.return_value = Mock()
+        provider = LinodeProvider(api_token="test-token")
+
+        result = provider.get_instance_status("not-an-int")
+        assert "error" in result
+
+    def test_generate_password(self):
+        password = LinodeProvider._generate_password(16)
+        assert len(password) == 16
