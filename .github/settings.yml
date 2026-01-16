@@ -1,0 +1,24 @@
+branches:
+  - name: main
+    protection:
+      required_status_checks:
+        strict: true
+        contexts:
+          - Lint and Test / Python Linting
+          - Lint and Test / Python Tests (3.10)
+          - Lint and Test / Python Tests (3.11)
+          - Lint and Test / Python Tests (3.12)
+          - Lint and Test / Python Tests (3.13)
+          - Lint and Test / Python Tests (3.14)
+          - Lint and Test / Validate Configuration Files
+          - Lint and Test / Validate Documentation
+          - Lint and Test / Security Checks
+          - Lint and Test / Validate GPU Region Configuration
+          - Lint and Test / CLI Smoke Test
+      required_pull_request_reviews:
+        dismiss_stale_reviews: true
+        required_approving_review_count: 1
+      enforce_admins: true
+      required_linear_history: true
+      allow_force_pushes: false
+      allow_deletions: false

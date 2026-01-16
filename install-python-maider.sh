@@ -39,6 +39,21 @@ echo "Installing dependencies..."
 pip install --upgrade pip > /dev/null
 pip install -e . > /dev/null
 
+if ! python -c "import maider" >/dev/null 2>&1; then
+    echo "❌ Failed to import maider after install. Make sure you're running from the repo root."
+    exit 1
+fi
+
+expected_maider_path="$PWD/venv/bin/maider"
+if command -v maider >/dev/null 2>&1; then
+    current_maider_path="$(command -v maider)"
+    if [[ "$current_maider_path" != "$expected_maider_path" ]]; then
+        echo "⚠️  maider on PATH is $current_maider_path"
+        echo "   Activate this repo's venv: source venv/bin/activate"
+        echo "   Or run: $expected_maider_path"
+    fi
+fi
+
 echo
 echo "✓ Installation complete!"
 echo

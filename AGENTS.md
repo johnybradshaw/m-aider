@@ -31,6 +31,7 @@
 
 ## Commit & Pull Request Guidelines
 - Git history mixes plain messages and Conventional Commits; use short, imperative subjects, and prefer `feat:`/`fix:`/`docs:` when it fits.
+- Always create a new branch before making changes; never work directly on `main`.
 - Include context, key commands run, and any cost-impacting changes in PR descriptions.
 - Update `CLAUDE.MD` when behavior, workflows, or architecture changes.
 - Never commit secrets; verify with `git check-ignore .env.secrets`.

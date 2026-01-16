@@ -40,7 +40,7 @@ On Linode:
 ```bash
 # Clone this repository
 git clone https://github.com/johnybradshaw/m-aider.git
-cd aider
+cd m-aider
 
 # One-time installation
 ./install-python-maider.sh
