@@ -195,14 +195,18 @@ def _restart_containers(ip: str):
         console.print(
             "[yellow]⚠ docker compose restart timed out; falling back to systemctl[/yellow]"
         )
-        result = subprocess.run(
-            ["ssh", f"root@{ip}", "systemctl restart vllm"],
-            capture_output=True,
-            text=True,
-            timeout=60,
-        )
-        if result.returncode != 0:
-            console.print(f"[red]Failed to restart via systemctl: {result.stderr}[/red]")
+        try:
+            result = subprocess.run(
+                ["ssh", f"root@{ip}", "systemctl restart vllm"],
+                capture_output=True,
+                text=True,
+                timeout=60,
+            )
+            if result.returncode != 0:
+                console.print(f"[red]Failed to restart via systemctl: {result.stderr}[/red]")
+                sys.exit(1)
+        except subprocess.TimeoutExpired:
+            console.print("[red]Fallback restart via systemctl also timed out.[/red]")
             sys.exit(1)
 
 
