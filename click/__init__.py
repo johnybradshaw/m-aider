@@ -25,7 +25,9 @@ class Context:
         self.command = command
 
 
-def _passthrough_decorator(*args: Any, **kwargs: Any) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
+def _passthrough_decorator(
+    *args: Any, **kwargs: Any
+) -> Callable[[Callable[..., Any]], Callable[..., Any]]:
     def decorator(func: Callable[..., Any]) -> Callable[..., Any]:
         return func
 

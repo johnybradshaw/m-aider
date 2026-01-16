@@ -314,15 +314,22 @@ class LinodeProvider(CloudProvider):
 
     @staticmethod
     def _vram_from_label(label: str) -> Optional[int]:
-        import re
-
-        match = re.search(r"(\d+)GB", label, re.IGNORECASE)
-        if not match:
+        total_gb = None
+        upper_label = label.upper()
+        gb_index = upper_label.find("GB")
+        if gb_index == -1:
             return None
 
-        total_gb = int(match.group(1))
+        num_end = gb_index
+        num_start = num_end
+        while num_start > 0 and upper_label[num_start - 1].isdigit():
+            num_start -= 1
+        if num_start == num_end:
+            return None
+
+        total_gb = int(upper_label[num_start:num_end])
         gpu_count = LinodeProvider._gpu_count_from_label(label)
-        return total_gb // gpu_count if gpu_count > 0 else total_gb
+        return total_gb // max(gpu_count, 1)
 
     @staticmethod
     def _gpu_count_from_label(label: str) -> int:

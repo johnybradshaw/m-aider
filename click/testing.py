@@ -25,6 +25,7 @@ class CliRunner:
         command: Any,
         args: Iterable[str] | None = None,
         input: str | None = None,
+        catch_exceptions: bool = True,
     ) -> Result:
         arg_list = list(args or [])
         stdin = io.StringIO(input or "")
@@ -40,7 +41,9 @@ class CliRunner:
         except SystemExit as system_exit:
             exit_code = system_exit.code if isinstance(system_exit.code, int) else 1
             exc = system_exit
-        except Exception as error:  # pragma: no cover - mirrors click behavior  # NOSONAR
+        except Exception as error:  # pragma: no cover - mirrors click behavior
+            if not catch_exceptions:
+                raise
             exit_code = 1
             exc = error
 
@@ -102,7 +105,10 @@ class CliRunner:
         bound_positionals: list[Any] = []
         remaining_positionals = list(positionals)
         for param in parameters.values():
-            if param.kind in (inspect.Parameter.POSITIONAL_ONLY, inspect.Parameter.POSITIONAL_OR_KEYWORD):
+            if param.kind in (
+                inspect.Parameter.POSITIONAL_ONLY,
+                inspect.Parameter.POSITIONAL_OR_KEYWORD,
+            ):
                 if param.name in kwargs:
                     continue
                 if remaining_positionals:
