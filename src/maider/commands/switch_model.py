@@ -10,6 +10,7 @@ from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from ..config import Config
+from ..compose import ComposeRuntime
 from ..session import SessionManager
 
 console = Console()
@@ -110,10 +111,10 @@ def _confirm_switch():
 
 def _build_runtime(
     config: Config, model_id: str, served_name: str, max_len: int, tensor_parallel: int
-) -> tuple["ComposeRuntime", str, str]:
+) -> tuple[ComposeRuntime, str, str]:
     from dataclasses import replace
 
-    from ..compose import ComposeRuntime, render_compose, render_runtime_env, runtime_from_config
+    from ..compose import render_compose, render_runtime_env, runtime_from_config
 
     runtime: ComposeRuntime = runtime_from_config(
         config, model_id=model_id, served_model_name=served_name
@@ -190,7 +191,7 @@ def _restart_containers(ip: str):
         sys.exit(1)
 
 
-def _wait_for_api(ip: str, runtime: "ComposeRuntime"):
+def _wait_for_api(ip: str, runtime: ComposeRuntime):
     console.print("\n[bold]Waiting for vLLM API...[/bold]")
     console.print("[dim](This may take 10-20 minutes for model download)[/dim]")
 
