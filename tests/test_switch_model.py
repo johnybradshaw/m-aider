@@ -1,6 +1,7 @@
 """Tests for switch-model command."""
 
 import json
+import subprocess
 from pathlib import Path
 from unittest.mock import Mock, patch, MagicMock
 
@@ -8,6 +9,7 @@ import pytest
 from click.testing import CliRunner
 
 from src.maider.commands.switch_model import cmd as switch_model_cmd
+from src.maider.commands import switch_model as switch_model_module
 from src.maider.session import SessionManager
 
 
@@ -246,3 +248,13 @@ class TestSwitchModel:
         assert metadata["openai/coder-14b"]["max_output_tokens"] == 8192  # Half of max_tokens
         assert metadata["openai/coder-14b"]["litellm_provider"] == "openai"
         assert metadata["openai/coder-14b"]["mode"] == "chat"
+
+    @patch("src.maider.commands.switch_model.subprocess.run")
+    def test_restart_containers_timeout_fallback(self, mock_subprocess):
+        """Test fallback to systemctl when docker compose restart hangs."""
+        mock_subprocess.side_effect = [
+            subprocess.TimeoutExpired(cmd="ssh", timeout=120),
+            Mock(returncode=0, stdout="", stderr=""),
+        ]
+
+        switch_model_module._restart_containers("192.0.2.1")

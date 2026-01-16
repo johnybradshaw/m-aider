@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from dataclasses import dataclass
+import shlex
 
 from .config import Config
 
@@ -76,31 +77,42 @@ def render_runtime_env(runtime: ComposeRuntime, hf_token: str) -> str:
     )
 
 
-def _vllm_command(runtime: ComposeRuntime) -> str:
+def _vllm_command_args(runtime: ComposeRuntime) -> list[str]:
     args = [
-        "vllm serve ${MODEL_ID}",
-        "--host 0.0.0.0",
-        "--port 8000",
-        "--served-model-name ${SERVED_MODEL_NAME}",
-        "--gpu-memory-utilization ${VLLM_GPU_MEMORY_UTILIZATION}",
-        "--max-num-seqs ${VLLM_MAX_NUM_SEQS}",
-        "--max-model-len ${VLLM_MAX_MODEL_LEN}",
-        "--tensor-parallel-size ${VLLM_TENSOR_PARALLEL_SIZE}",
-        "--dtype ${VLLM_DTYPE}",
+        "serve",
+        "${MODEL_ID}",
+        "--host",
+        "0.0.0.0",
+        "--port",
+        "8000",
+        "--served-model-name",
+        "${SERVED_MODEL_NAME}",
+        "--gpu-memory-utilization",
+        "${VLLM_GPU_MEMORY_UTILIZATION}",
+        "--max-num-seqs",
+        "${VLLM_MAX_NUM_SEQS}",
+        "--max-model-len",
+        "${VLLM_MAX_MODEL_LEN}",
+        "--tensor-parallel-size",
+        "${VLLM_TENSOR_PARALLEL_SIZE}",
+        "--dtype",
+        "${VLLM_DTYPE}",
     ]
     extra = runtime.vllm_extra_args.strip()
     if extra:
-        args.append("${VLLM_EXTRA_ARGS}")
-    return "\n      ".join(args)
+        args.extend(shlex.split(extra))
+    return args
+
+
+def _yaml_quote(value: str) -> str:
+    return value.replace('\\', '\\\\').replace('"', '\\"')
 
 
 def _vllm_healthcheck() -> str:
     return "\n".join(
         [
             "    healthcheck:",
-            '      test: ["CMD-SHELL", "python -c \\"import urllib.request; '
-            "urllib.request.urlopen('http://localhost:8000/v1/models', timeout=2).read()\\"
-            "]",
+            '      test: ["CMD-SHELL", "curl -fsS http://localhost:8000/v1/models >/dev/null"]',
             "      interval: 30s",
             "      timeout: 5s",
             "      retries: 6",
@@ -112,9 +124,7 @@ def _webui_healthcheck() -> str:
     return "\n".join(
         [
             "    healthcheck:",
-            '      test: ["CMD-SHELL", "python -c \\"import urllib.request; '
-            "urllib.request.urlopen('http://localhost:8080/', timeout=2).read()\\"
-            "]",
+            '      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/ >/dev/null"]',
             "      interval: 30s",
             "      timeout: 5s",
             "      retries: 6",
@@ -189,8 +199,10 @@ def render_compose(runtime: ComposeRuntime) -> str:
                 "    ports:",
                 '      - "127.0.0.1:${VLLM_PORT}:8000"',
                 *vllm_env,
-                "    command: >",
-                f"      {_vllm_command(runtime)}",
+                "    entrypoint:",
+                '      - "vllm"',
+                "    command:",
+                *[f'      - "{_yaml_quote(arg)}"' for arg in _vllm_command_args(runtime)],
                 "    restart: unless-stopped",
                 vllm_healthcheck,
                 *vllm_volumes,
