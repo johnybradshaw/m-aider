@@ -110,12 +110,14 @@ def _confirm_switch():
 
 def _build_runtime(
     config: Config, model_id: str, served_name: str, max_len: int, tensor_parallel: int
-):
+) -> tuple["ComposeRuntime", str, str]:
     from dataclasses import replace
 
-    from ..compose import render_compose, render_runtime_env, runtime_from_config
+    from ..compose import ComposeRuntime, render_compose, render_runtime_env, runtime_from_config
 
-    runtime = runtime_from_config(config, model_id=model_id, served_model_name=served_name)
+    runtime: ComposeRuntime = runtime_from_config(
+        config, model_id=model_id, served_model_name=served_name
+    )
     runtime = replace(
         runtime,
         vllm_max_model_len=max_len,
@@ -188,7 +190,7 @@ def _restart_containers(ip: str):
         sys.exit(1)
 
 
-def _wait_for_api(ip: str, runtime):
+def _wait_for_api(ip: str, runtime: "ComposeRuntime"):
     console.print("\n[bold]Waiting for vLLM API...[/bold]")
     console.print("[dim](This may take 10-20 minutes for model download)[/dim]")
 
