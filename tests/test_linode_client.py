@@ -27,6 +27,7 @@ def mock_config():
     config.vllm_port = 8000
     config.webui_port = 3000
     config.enable_openwebui = True
+    config.openwebui_auth = True
     config.enable_hf_cache = True
     config.enable_healthchecks = False
     config.enable_nccl_env = False
