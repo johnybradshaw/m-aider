@@ -60,16 +60,16 @@ nano .env  # Add your HUGGING_FACE_HUB_TOKEN and FIREWALL_ID
 #### `rtx6000-2gpu.env`
 - **Hardware**: 2x RTX 6000 Ada (96GB total VRAM)
 - **Cost**: ~$3.00/hour
-- **Best for**: 70B models with large context
-- **Recommended models**: Qwen2.5-Coder-70B-AWQ, Llama-3.1-70B-AWQ
+- **Best for**: 32B full-precision coder, 70B general models
+- **Recommended models**: Qwen2.5-Coder-32B (FP16), Qwen2.5-72B-Instruct-AWQ
 - **Context**: Up to 32-48K tokens
 - **Use case**: Production with large models, extensive context
 
 #### `rtx6000-4gpu.env`
 - **Hardware**: 4x RTX 6000 Ada (192GB total VRAM)
 - **Cost**: ~$6.00/hour
-- **Best for**: Full-precision 70B, massive context, 200B+ quantized
-- **Recommended models**: Qwen2.5-Coder-70B (FP16), DeepSeek-Coder-V2-236B-AWQ
+- **Best for**: 32B full-precision with huge context, 72B general models
+- **Recommended models**: Qwen2.5-Coder-32B (FP16), Qwen2.5-72B-Instruct
 - **Context**: Up to 64K+ tokens
 - **Use case**: Maximum quality, research, very large codebases
 

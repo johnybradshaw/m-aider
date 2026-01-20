@@ -40,7 +40,7 @@ CAPABILITY_MODELS = {
         "name": "Large models (70B+)",
         "description": "Maximum capability",
         "min_vram_gb": 80,
-        "recommended_model": "Qwen/Qwen2.5-Coder-70B-Instruct-AWQ",
+        "recommended_model": "Qwen/Qwen2.5-72B-Instruct-AWQ",
         "context_length": 32768,
         "cost_range": "$3.00-6.00/hr",
     },

@@ -21,8 +21,9 @@ KNOWN_CONTEXT_LENGTHS: dict[str, int] = {
     "Qwen/Qwen2.5-Coder-14B-Instruct-AWQ": 32768,
     "Qwen/Qwen2.5-Coder-32B-Instruct": 32768,
     "Qwen/Qwen2.5-Coder-32B-Instruct-AWQ": 32768,
-    "Qwen/Qwen2.5-Coder-70B-Instruct": 32768,
-    "Qwen/Qwen2.5-Coder-70B-Instruct-AWQ": 32768,
+    # Note: Qwen2.5-Coder maxes out at 32B. For 70B+ use general-purpose Qwen2.5
+    "Qwen/Qwen2.5-72B-Instruct": 131072,
+    "Qwen/Qwen2.5-72B-Instruct-AWQ": 131072,
 }
 
 # HuggingFace API timeout
