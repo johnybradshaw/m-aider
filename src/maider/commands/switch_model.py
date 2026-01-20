@@ -57,13 +57,15 @@ def cmd(
     console.print("\n[bold]Updating VM configuration...[/bold]")
     _upload_runtime(session.ip, docker_compose, runtime_env)
     _restart_containers(session.ip)
+
+    # Update session and local metadata early so they're consistent even if API check times out
+    console.print("\n[bold]Updating local metadata...[/bold]")
+    _generate_aider_metadata(served_name, final_max_model_len)
+    _update_session_model(session_mgr, session, model_id, served_name)
+
     _wait_for_api(session.ip, runtime)
     _verify_model(session.ip, runtime.vllm_port, served_name)
 
-    console.print("\n[bold]Updating local metadata...[/bold]")
-    _generate_aider_metadata(served_name, final_max_model_len)
-
-    _update_session_model(session_mgr, session, model_id, served_name)
     console.print(f"\n[green]✓[/green] Successfully switched to {model_id}")
     console.print("\n[dim]Restart aider to use the new model[/dim]")
 
@@ -301,9 +303,11 @@ def _wait_for_api(ip: str, runtime: ComposeRuntime):
                     ],
                     capture_output=True,
                     text=True,
-                    timeout=5,
+                    timeout=10,
                 )
-                if result.returncode == 0 and "models" in result.stdout:
+                # Check for valid vLLM response - the /v1/models endpoint returns
+                # {"object": "list", "data": [...]} when ready
+                if result.returncode == 0 and '"data"' in result.stdout:
                     progress.update(task, completed=True)
                     break
             except subprocess.TimeoutExpired:
@@ -311,9 +315,10 @@ def _wait_for_api(ip: str, runtime: ComposeRuntime):
 
             time.sleep(5)
         else:
-            console.print("[red]Timeout waiting for API[/red]")
-            console.print(f"Check logs with: [cyan]ssh root@{ip} docker logs vllm[/cyan]")
-            sys.exit(1)
+            console.print("[yellow]⚠ Timeout waiting for API[/yellow]")
+            console.print("[dim]The model may still be loading. Check status with:[/dim]")
+            console.print(f"  [cyan]ssh root@{ip} docker logs -f vllm[/cyan]")
+            # Don't exit - session metadata is already updated
 
     console.print("[green]✓[/green] API ready")
 

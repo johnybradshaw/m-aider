@@ -126,13 +126,13 @@ class TestSwitchModel:
         """Test successful model switch."""
         monkeypatch.chdir(temp_dir)
 
-        # Mock subprocess calls
+        # Mock subprocess calls - note: session update now happens before API wait
         mock_subprocess.side_effect = [
-            Mock(returncode=0, stdout="", stderr=""),  # scp upload
+            Mock(returncode=0, stdout="", stderr=""),  # scp upload docker-compose
             Mock(returncode=0, stdout="", stderr=""),  # scp env upload
             Mock(returncode=0, stdout="", stderr=""),  # docker restart
-            Mock(returncode=0, stdout='{"models": ["coder-14b"]}', stderr=""),  # curl (waiting)
-            Mock(returncode=0, stdout='{"models": ["coder-14b"]}', stderr=""),  # curl (verify)
+            Mock(returncode=0, stdout='{"data": [{"id": "coder"}]}', stderr=""),  # curl (waiting)
+            Mock(returncode=0, stdout='{"data": [{"id": "coder"}]}', stderr=""),  # curl (verify)
         ]
 
         with patch("src.maider.commands.switch_model.SessionManager") as mock_sm:
@@ -167,13 +167,13 @@ class TestSwitchModel:
         """Test switch model with parameter overrides."""
         monkeypatch.chdir(temp_dir)
 
-        # Mock subprocess calls
+        # Mock subprocess calls - note: session update now happens before API wait
         mock_subprocess.side_effect = [
-            Mock(returncode=0, stdout="", stderr=""),  # scp upload
+            Mock(returncode=0, stdout="", stderr=""),  # scp upload docker-compose
             Mock(returncode=0, stdout="", stderr=""),  # scp env upload
             Mock(returncode=0, stdout="", stderr=""),  # docker restart
-            Mock(returncode=0, stdout='{"models": ["coder-14b"]}', stderr=""),  # curl
-            Mock(returncode=0, stdout='{"models": ["coder-14b"]}', stderr=""),  # curl verify
+            Mock(returncode=0, stdout='{"data": [{"id": "coder"}]}', stderr=""),  # curl (waiting)
+            Mock(returncode=0, stdout='{"data": [{"id": "coder"}]}', stderr=""),  # curl (verify)
         ]
 
         with patch("src.maider.commands.switch_model.SessionManager") as mock_sm:
