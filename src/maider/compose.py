@@ -189,8 +189,6 @@ def render_compose(runtime: ComposeRuntime) -> str:
     return (
         "\n".join(
             [
-                'version: "3.8"',
-                "",
                 "services:",
                 "  vllm:",
                 "    image: ${VLLM_IMAGE}",

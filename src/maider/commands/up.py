@@ -12,6 +12,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from ..config import Config
 from ..linode_client import LinodeManager
+from ..model_validation import validate_max_model_len
 from ..session import SessionManager
 from ..watchdog import start_watchdog_background
 from ..healing import check_and_heal_vllm
@@ -34,6 +35,7 @@ def cmd(name: str, launch_aider: bool):
     _validate_config_or_exit(config)
 
     gpu_count = _sync_tensor_parallel(config)
+    _validate_max_model_len_or_adjust(config)
     hourly_cost = config.get_hourly_cost()
     _print_config(config, gpu_count, hourly_cost)
 
@@ -81,6 +83,61 @@ def _sync_tensor_parallel(config: Config) -> int:
         console.print(f"Auto-correcting to {gpu_count}")
         config.vllm_tensor_parallel_size = gpu_count
     return gpu_count
+
+
+def _validate_max_model_len_or_adjust(config: Config):
+    """Validate max_model_len against the model's actual limits.
+
+    If validation fails, prompts the user to use a corrected value,
+    override anyway, or cancel.
+    """
+    console.print("\n[bold]Validating model configuration...[/bold]")
+
+    result = validate_max_model_len(config.model_id, config.vllm_max_model_len, config.hf_token)
+
+    if result.is_valid:
+        if result.warning:
+            console.print(f"[yellow]Warning:[/yellow] {result.warning}")
+        else:
+            console.print(
+                f"[green]✓[/green] max_model_len={config.vllm_max_model_len} is valid "
+                f"(model limit: {result.model_max_len})"
+            )
+        return
+
+    # Validation failed - max_model_len exceeds model limits
+    console.print("\n[red]Configuration Error:[/red]")
+    console.print(
+        f"  VLLM_MAX_MODEL_LEN={config.vllm_max_model_len} exceeds the model's "
+        f"max_position_embeddings={result.model_max_len}"
+    )
+    console.print("\n  This will cause vLLM to fail with a validation error unless you set")
+    console.print("  VLLM_ALLOW_LONG_MAX_MODEL_LEN=1 (which can cause NaN values or crashes)")
+
+    console.print("\n[bold]Options:[/bold]")
+    console.print(f"  [1] Use suggested value: {result.suggested_max_len} (Recommended)")
+    console.print("  [2] Override anyway (risky - may cause NaN or crashes)")
+    console.print("  [3] Cancel")
+
+    while True:
+        choice = input("\nSelect option [1/2/3]: ").strip()
+        if choice == "1":
+            console.print(f"[green]✓[/green] Using max_model_len={result.suggested_max_len}")
+            config.vllm_max_model_len = result.suggested_max_len
+            return
+        elif choice == "2":
+            console.print(
+                f"[yellow]Warning:[/yellow] Proceeding with max_model_len={config.vllm_max_model_len}"
+            )
+            console.print(
+                "  vLLM will require VLLM_ALLOW_LONG_MAX_MODEL_LEN=1 environment variable"
+            )
+            return
+        elif choice == "3":
+            console.print("Cancelled")
+            sys.exit(0)
+        else:
+            console.print("[red]Invalid choice. Please enter 1, 2, or 3.[/red]")
 
 
 def _print_config(config: Config, gpu_count: int, hourly_cost: float):

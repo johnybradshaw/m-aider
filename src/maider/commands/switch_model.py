@@ -11,6 +11,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from ..config import Config
 from ..compose import ComposeRuntime
+from ..model_validation import validate_max_model_len
 from ..session import SessionManager
 
 console = Console()
@@ -41,6 +42,11 @@ def cmd(
     served_name = _resolve_served_name(config, session, model_id, served_model_name)
     final_max_model_len = max_model_len or config.vllm_max_model_len
     final_tensor_parallel = tensor_parallel_size or config.vllm_tensor_parallel_size
+
+    # Validate max_model_len against model's actual limits
+    final_max_model_len = _validate_and_adjust_max_len(
+        model_id, final_max_model_len, config.hf_token
+    )
 
     _print_plan(session, model_id, served_name, final_max_model_len, final_tensor_parallel)
     _confirm_switch()
@@ -91,6 +97,67 @@ def _resolve_served_name(
     if config.served_model_name:
         return config.served_model_name
     return model_id.split("/")[-1].lower()
+
+
+def _validate_and_adjust_max_len(
+    model_id: str,
+    max_model_len: int,
+    hf_token: str | None,
+) -> int:
+    """Validate max_model_len against the model's actual limits.
+
+    If the value exceeds the model's max_position_embeddings, prompts the user
+    to use a corrected value, override anyway, or cancel.
+
+    Returns:
+        The validated (possibly adjusted) max_model_len value
+    """
+    console.print("\n[bold]Validating model configuration...[/bold]")
+
+    result = validate_max_model_len(model_id, max_model_len, hf_token)
+
+    if result.is_valid:
+        if result.warning:
+            console.print(f"[yellow]Warning:[/yellow] {result.warning}")
+        else:
+            console.print(
+                f"[green]✓[/green] max_model_len={max_model_len} is valid "
+                f"(model limit: {result.model_max_len})"
+            )
+        return max_model_len
+
+    # Validation failed - max_model_len exceeds model limits
+    console.print("\n[red]Configuration Error:[/red]")
+    console.print(
+        f"  max_model_len={max_model_len} exceeds the model's "
+        f"max_position_embeddings={result.model_max_len}"
+    )
+    console.print("\n  This will cause vLLM to fail with a validation error unless you set")
+    console.print("  VLLM_ALLOW_LONG_MAX_MODEL_LEN=1 (which can cause NaN values or crashes)")
+
+    console.print("\n[bold]Options:[/bold]")
+    console.print(f"  [1] Use suggested value: {result.suggested_max_len} (Recommended)")
+    console.print("  [2] Override anyway (risky - may cause NaN or crashes)")
+    console.print("  [3] Cancel")
+
+    while True:
+        choice = input("\nSelect option [1/2/3]: ").strip()
+        if choice == "1":
+            console.print(f"[green]✓[/green] Using max_model_len={result.suggested_max_len}")
+            return result.suggested_max_len
+        elif choice == "2":
+            console.print(
+                f"[yellow]Warning:[/yellow] Proceeding with max_model_len={max_model_len}"
+            )
+            console.print(
+                "  vLLM will require VLLM_ALLOW_LONG_MAX_MODEL_LEN=1 environment variable"
+            )
+            return max_model_len
+        elif choice == "3":
+            console.print("Cancelled")
+            sys.exit(0)
+        else:
+            console.print("[red]Invalid choice. Please enter 1, 2, or 3.[/red]")
 
 
 def _print_plan(session, model_id: str, served_name: str, max_len: int, tensor_parallel: int):

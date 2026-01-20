@@ -9,7 +9,18 @@ from click.testing import CliRunner
 
 from src.maider.commands.switch_model import cmd as switch_model_cmd
 from src.maider.commands import switch_model as switch_model_module
+from src.maider.model_validation import ValidationResult
 from src.maider.session import SessionManager
+
+
+def _make_valid_validation_result(model_id: str, max_len: int) -> ValidationResult:
+    """Create a valid validation result for testing."""
+    return ValidationResult(
+        is_valid=True,
+        model_id=model_id,
+        requested_max_len=max_len,
+        model_max_len=32768,
+    )
 
 
 @pytest.mark.unit
@@ -41,7 +52,20 @@ class TestSwitchModel:
             config.enable_hf_cache = True
             config.enable_healthchecks = False
             config.enable_nccl_env = False
+            config.hf_token = "test_token"
             mock.return_value = config
+            yield mock
+
+    @pytest.fixture
+    def mock_validation(self):
+        """Mock validation to always pass."""
+        with patch("src.maider.commands.switch_model.validate_max_model_len") as mock:
+            mock.return_value = ValidationResult(
+                is_valid=True,
+                model_id="test",
+                requested_max_len=32768,
+                model_max_len=32768,
+            )
             yield mock
 
     @pytest.fixture
@@ -58,7 +82,7 @@ class TestSwitchModel:
             served_model_name=mock_session_data["served_model_name"],
         )
 
-    def test_switch_model_no_current_session(self, runner, temp_dir, mock_config):
+    def test_switch_model_no_current_session(self, runner, temp_dir, mock_config, mock_validation):
         """Test error when no current session is set."""
         with patch("src.maider.commands.switch_model.SessionManager") as mock_sm:
             mock_sm_instance = Mock()
@@ -73,7 +97,7 @@ class TestSwitchModel:
             assert result.exit_code == 1
             assert "No current session set" in result.output
 
-    def test_switch_model_session_not_found(self, runner, temp_dir, mock_config):
+    def test_switch_model_session_not_found(self, runner, temp_dir, mock_config, mock_validation):
         """Test error when specified session doesn't exist."""
         with patch("src.maider.commands.switch_model.SessionManager") as mock_sm:
             mock_sm_instance = Mock()
@@ -90,7 +114,14 @@ class TestSwitchModel:
 
     @patch("src.maider.commands.switch_model.subprocess.run")
     def test_switch_model_success(
-        self, mock_subprocess, runner, temp_dir, mock_config, mock_session, monkeypatch
+        self,
+        mock_subprocess,
+        runner,
+        temp_dir,
+        mock_config,
+        mock_session,
+        mock_validation,
+        monkeypatch,
     ):
         """Test successful model switch."""
         monkeypatch.chdir(temp_dir)
@@ -124,7 +155,14 @@ class TestSwitchModel:
 
     @patch("src.maider.commands.switch_model.subprocess.run")
     def test_switch_model_with_overrides(
-        self, mock_subprocess, runner, temp_dir, mock_config, mock_session, monkeypatch
+        self,
+        mock_subprocess,
+        runner,
+        temp_dir,
+        mock_config,
+        mock_session,
+        mock_validation,
+        monkeypatch,
     ):
         """Test switch model with parameter overrides."""
         monkeypatch.chdir(temp_dir)
@@ -160,7 +198,9 @@ class TestSwitchModel:
             assert "Max tokens: 16384" in result.output
             assert "Tensor parallel: 2" in result.output
 
-    def test_switch_model_user_cancels(self, runner, temp_dir, mock_config, mock_session):
+    def test_switch_model_user_cancels(
+        self, runner, temp_dir, mock_config, mock_session, mock_validation
+    ):
         """Test user cancels model switch."""
         with patch("src.maider.commands.switch_model.SessionManager") as mock_sm:
             mock_sm_instance = Mock()
@@ -178,7 +218,7 @@ class TestSwitchModel:
 
     @patch("src.maider.commands.switch_model.subprocess.run")
     def test_switch_model_upload_fails(
-        self, mock_subprocess, runner, temp_dir, mock_config, mock_session
+        self, mock_subprocess, runner, temp_dir, mock_config, mock_session, mock_validation
     ):
         """Test error when docker-compose upload fails."""
         # Mock failed scp
@@ -204,7 +244,7 @@ class TestSwitchModel:
 
     @patch("src.maider.commands.switch_model.subprocess.run")
     def test_switch_model_restart_fails(
-        self, mock_subprocess, runner, temp_dir, mock_config, mock_session
+        self, mock_subprocess, runner, temp_dir, mock_config, mock_session, mock_validation
     ):
         """Test error when container restart fails."""
         # Mock successful upload, failed restart
