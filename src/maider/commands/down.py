@@ -5,13 +5,11 @@ import subprocess
 from pathlib import Path
 
 import click
-from rich.console import Console
 
 from ..config import Config
 from ..linode_client import LinodeManager
+from ..output import console
 from ..session import SessionManager
-
-console = Console()
 
 
 @click.command(name="down")
@@ -83,10 +81,12 @@ def _require_token_or_exit(config: Config, session):
     console.print("  2. Manually delete the Linode from the web dashboard:")
     console.print(f"     https://cloud.linode.com/linodes/{session.linode_id}\n")
     console.print(
-        f"  3. Then run: [cyan]coder cleanup --session {session.name} --force[/cyan] to remove local state\n"
+        f"  3. Then run: [cyan]coder cleanup --session {session.name} --force[/cyan] "
+        "to remove local state\n"
     )
     console.print(
-        "[yellow]⚠ VM {}/{} is still running and will continue to cost ${:.2f}/hour![/yellow]".format(
+        "[yellow]⚠ VM {}/{} is still running and will continue "
+        "to cost ${:.2f}/hour![/yellow]".format(
             session.linode_id, session.ip, session.hourly_cost
         )
     )
@@ -137,7 +137,8 @@ def _delete_linode(linode_mgr: LinodeManager, session):
         console.print("  3. Manually delete from web dashboard:")
         console.print(f"     https://cloud.linode.com/linodes/{session.linode_id}\n")
         console.print(
-            f"  4. Then run: [cyan]coder cleanup --session {session.name} --force[/cyan] to remove local state\n"
+            f"  4. Then run: [cyan]coder cleanup --session {session.name} --force[/cyan] "
+            "to remove local state\n"
         )
         console.print("[yellow]Local session state has NOT been deleted.[/yellow]")
         sys.exit(1)

@@ -7,17 +7,15 @@ from pathlib import Path
 
 import click
 import requests
-from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from ..config import Config
 from ..linode_client import LinodeManager
 from ..model_validation import validate_max_model_len
+from ..output import console
 from ..session import SessionManager
 from ..watchdog import start_watchdog_background
 from ..healing import check_and_heal_vllm
-
-console = Console()
 PROGRESS_TEXT = "[progress.description]{task.description}"
 SSH_CONNECT_TIMEOUT = "ConnectTimeout=5"
 SSH_STRICT_HOST_KEY = "StrictHostKeyChecking=no"
@@ -77,8 +75,8 @@ def _sync_tensor_parallel(config: Config) -> int:
     gpu_count = config.get_gpu_count()
     if config.vllm_tensor_parallel_size != gpu_count:
         console.print(
-            f"[yellow]Warning:[/yellow] VLLM_TENSOR_PARALLEL_SIZE ({config.vllm_tensor_parallel_size}) "
-            f"doesn't match GPU count ({gpu_count})"
+            f"[yellow]Warning:[/yellow] VLLM_TENSOR_PARALLEL_SIZE "
+            f"({config.vllm_tensor_parallel_size}) doesn't match GPU count ({gpu_count})"
         )
         console.print(f"Auto-correcting to {gpu_count}")
         config.vllm_tensor_parallel_size = gpu_count
@@ -127,7 +125,8 @@ def _validate_max_model_len_or_adjust(config: Config):
             return
         elif choice == "2":
             console.print(
-                f"[yellow]Warning:[/yellow] Proceeding with max_model_len={config.vllm_max_model_len}"
+                "[yellow]Warning:[/yellow] Proceeding with "
+                f"max_model_len={config.vllm_max_model_len}"
             )
             console.print(
                 "  vLLM will require VLLM_ALLOW_LONG_MAX_MODEL_LEN=1 environment variable"
@@ -231,7 +230,8 @@ def _start_watchdog_if_enabled(session, config: Config):
         return
     console.print("[bold]Starting watchdog...[/bold]")
     console.print(
-        f"[dim]VM will auto-destroy after {config.watchdog_timeout_minutes} minutes of inactivity[/dim]\n"
+        f"[dim]VM will auto-destroy after {config.watchdog_timeout_minutes} "
+        "minutes of inactivity[/dim]\n"
     )
 
     try:

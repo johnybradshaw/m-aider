@@ -6,15 +6,13 @@ import subprocess
 from pathlib import Path
 
 import click
-from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
-from ..config import Config
 from ..compose import ComposeRuntime
+from ..config import Config
 from ..model_validation import validate_max_model_len
+from ..output import console
 from ..session import SessionManager
-
-console = Console()
 
 
 @click.command(name="switch-model")

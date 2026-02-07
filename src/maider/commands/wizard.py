@@ -4,17 +4,15 @@ import sys
 from pathlib import Path
 
 import click
-from rich.console import Console
-from rich.prompt import Prompt, Confirm
 from rich.panel import Panel
+from rich.prompt import Confirm, Prompt
 
 from ..config import Config
+from ..output import console
 
 # Import GPU data from provider abstraction
 from ..providers.linode import GPU_REGIONS as LINODE_GPU_REGIONS
 from ..providers.linode import GPU_TYPES as LINODE_GPU_TYPES
-
-console = Console()
 CHOICE_PROMPT = "\nChoice"
 
 

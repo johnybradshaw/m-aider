@@ -3,8 +3,8 @@
 
 import sys
 import click
-from rich.console import Console
 
+from .output import set_quiet
 from .commands import (
     up,
     down,
@@ -20,6 +20,7 @@ from .commands import (
     extend,
     switch_model,
     tunnel,
+    watch,
     benchmark,
     benchmark_collect,
     benchmark_compare,
@@ -27,14 +28,17 @@ from .commands import (
     recommend,
 )
 
-console = Console()
-
 
 @click.group()
 @click.version_option()
-def main():
+@click.option(
+    "--quiet", "-q",
+    is_flag=True,
+    help="Suppress non-essential output. Errors are still shown."
+)
+def main(quiet: bool):
     """Linode GPU vLLM deployment tool for multi-card setups."""
-    pass
+    set_quiet(quiet)
 
 
 # Register commands
@@ -49,6 +53,7 @@ main.add_command(cleanup.cmd)
 main.add_command(extend.cmd)
 main.add_command(switch_model.cmd)
 main.add_command(tunnel.cmd)
+main.add_command(watch.cmd)
 main.add_command(validate.cmd)
 main.add_command(check.cmd)
 main.add_command(validate_perf.cmd)

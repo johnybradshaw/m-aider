@@ -2,13 +2,11 @@
 
 import sys
 import click
-from rich.console import Console
 
 from ..config import Config
 from ..linode_client import LinodeManager
+from ..output import console
 from ..session import SessionManager
-
-console = Console()
 
 
 @click.command(name="status")

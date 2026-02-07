@@ -4,11 +4,9 @@ import sys
 import time
 
 import click
-from rich.console import Console
 
+from ..output import console
 from ..session import SessionManager
-
-console = Console()
 
 
 @click.command(name="extend")

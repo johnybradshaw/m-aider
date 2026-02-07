@@ -3,14 +3,12 @@
 import shutil
 
 import click
-from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
-from ..session import SessionManager
-from ..linode_client import LinodeManager
 from ..config import Config
-
-console = Console()
+from ..linode_client import LinodeManager
+from ..output import console
+from ..session import SessionManager
 
 
 @click.command(name="cleanup")
@@ -135,7 +133,8 @@ def _get_linode_manager():
         return LinodeManager(config)
     except Exception:
         console.print(
-            "[yellow]⚠ No LINODE_TOKEN - can only remove sessions with missing state files[/yellow]\n"
+            "[yellow]⚠ No LINODE_TOKEN - can only remove sessions "
+            "with missing state files[/yellow]\n"
         )
         return None
 
@@ -155,7 +154,8 @@ def _cleanup_session_dir(session_mgr: SessionManager, linode_mgr, session):
         instance = linode_mgr.get_instance(session.linode_id)
         if not instance:
             console.print(
-                f"[yellow]  Removing stale session: {session.name} (Linode {session.linode_id} no longer exists)[/yellow]"
+                f"[yellow]  Removing stale session: {session.name} "
+                f"(Linode {session.linode_id} no longer exists)[/yellow]"
             )
             shutil.rmtree(session_dir)
             return True
