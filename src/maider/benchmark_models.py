@@ -67,7 +67,7 @@ MODEL_CATEGORIES = {
     ],
     "70b": [
         ModelConfig(
-            id="Qwen/Qwen2.5-Coder-70B-Instruct-AWQ",
+            id="Qwen/Qwen2.5-72B-Instruct-AWQ",
             category="70b",
             quantization="awq",
             min_vram_gb=70,

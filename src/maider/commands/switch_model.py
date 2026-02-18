@@ -6,14 +6,13 @@ import subprocess
 from pathlib import Path
 
 import click
-from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
-from ..config import Config
 from ..compose import ComposeRuntime
+from ..config import Config
+from ..model_validation import prompt_for_max_len_adjustment, validate_max_model_len
+from ..output import console
 from ..session import SessionManager
-
-console = Console()
 
 
 @click.command(name="switch-model")
@@ -42,6 +41,11 @@ def cmd(
     final_max_model_len = max_model_len or config.vllm_max_model_len
     final_tensor_parallel = tensor_parallel_size or config.vllm_tensor_parallel_size
 
+    # Validate max_model_len against model's actual limits
+    final_max_model_len = _validate_and_adjust_max_len(
+        model_id, final_max_model_len, config.hf_token
+    )
+
     _print_plan(session, model_id, served_name, final_max_model_len, final_tensor_parallel)
     _confirm_switch()
 
@@ -51,13 +55,15 @@ def cmd(
     console.print("\n[bold]Updating VM configuration...[/bold]")
     _upload_runtime(session.ip, docker_compose, runtime_env)
     _restart_containers(session.ip)
+
+    # Update session and local metadata early so they're consistent even if API check times out
+    console.print("\n[bold]Updating local metadata...[/bold]")
+    _generate_aider_metadata(served_name, final_max_model_len)
+    _update_session_model(session_mgr, session, model_id, served_name)
+
     _wait_for_api(session.ip, runtime)
     _verify_model(session.ip, runtime.vllm_port, served_name)
 
-    console.print("\n[bold]Updating local metadata...[/bold]")
-    _generate_aider_metadata(served_name, final_max_model_len)
-
-    _update_session_model(session_mgr, session, model_id, served_name)
     console.print(f"\n[green]✓[/green] Successfully switched to {model_id}")
     console.print("\n[dim]Restart aider to use the new model[/dim]")
 
@@ -91,6 +97,36 @@ def _resolve_served_name(
     if config.served_model_name:
         return config.served_model_name
     return model_id.split("/")[-1].lower()
+
+
+def _validate_and_adjust_max_len(
+    model_id: str,
+    max_model_len: int,
+    hf_token: str | None,
+) -> int:
+    """Validate max_model_len against the model's actual limits.
+
+    If the value exceeds the model's max_position_embeddings, prompts the user
+    to use a corrected value, override anyway, or cancel.
+
+    Returns:
+        The validated (possibly adjusted) max_model_len value
+    """
+    console.print("\n[bold]Validating model configuration...[/bold]")
+
+    result = validate_max_model_len(model_id, max_model_len, hf_token)
+
+    if result.is_valid:
+        if result.warning:
+            console.print(f"[yellow]Warning:[/yellow] {result.warning}")
+        else:
+            console.print(
+                f"[green]✓[/green] max_model_len={max_model_len} is valid "
+                f"(model limit: {result.model_max_len})"
+            )
+        return max_model_len
+
+    return prompt_for_max_len_adjustment(result, max_model_len)
 
 
 def _print_plan(session, model_id: str, served_name: str, max_len: int, tensor_parallel: int):
@@ -234,9 +270,11 @@ def _wait_for_api(ip: str, runtime: ComposeRuntime):
                     ],
                     capture_output=True,
                     text=True,
-                    timeout=5,
+                    timeout=10,
                 )
-                if result.returncode == 0 and "models" in result.stdout:
+                # Check for valid vLLM response - the /v1/models endpoint returns
+                # {"object": "list", "data": [...]} when ready
+                if result.returncode == 0 and '"data"' in result.stdout:
                     progress.update(task, completed=True)
                     break
             except subprocess.TimeoutExpired:
@@ -244,9 +282,10 @@ def _wait_for_api(ip: str, runtime: ComposeRuntime):
 
             time.sleep(5)
         else:
-            console.print("[red]Timeout waiting for API[/red]")
-            console.print(f"Check logs with: [cyan]ssh root@{ip} docker logs vllm[/cyan]")
-            sys.exit(1)
+            console.print("[yellow]⚠ Timeout waiting for API[/yellow]")
+            console.print("[dim]The model may still be loading. Check status with:[/dim]")
+            console.print(f"  [cyan]ssh root@{ip} docker logs -f vllm[/cyan]")
+            # Don't exit - session metadata is already updated
 
     console.print("[green]✓[/green] API ready")
 

@@ -44,7 +44,10 @@ class Watchdog:
                 "-o",
                 "StrictHostKeyChecking=no",
                 f"root@{self.session.ip}",
-                "docker logs --since 2m $(docker ps -q | head -n1) 2>&1 | grep -i 'POST\\|GET' | wc -l",
+                (
+                    "docker logs --since 2m $(docker ps -q | head -n1) 2>&1 | "
+                    "grep -i 'POST\\|GET' | wc -l"
+                ),
             ]
 
             result = subprocess.run(
@@ -109,19 +112,22 @@ class Watchdog:
 
             # Send warning if approaching timeout
             if not self.warned and idle_minutes >= (self.timeout_minutes - self.warning_minutes):
-                warning_msg = f"VM '{self.session.name}' will be destroyed in {self.warning_minutes} minutes due to inactivity"
+                warning_msg = (
+                    f"VM '{self.session.name}' will be destroyed in "
+                    f"{self.warning_minutes} minutes due to inactivity"
+                )
                 print(f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - {warning_msg}")
                 self.send_notification("Linode Watchdog", warning_msg)
                 self.warned = True
 
             # Destroy if timeout reached
             if idle_minutes >= self.timeout_minutes:
-                print(
-                    f"{datetime.now().strftime('%Y-%m-%d %H:%M:%S')} - Timeout reached, destroying VM"
-                )
+                timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                print(f"{timestamp} - Timeout reached, destroying VM")
                 self.send_notification(
                     "Linode Watchdog",
-                    f"Destroying VM '{self.session.name}' due to {self.timeout_minutes}min inactivity",
+                    f"Destroying VM '{self.session.name}' due to "
+                    f"{self.timeout_minutes}min inactivity",
                 )
 
                 # Destroy VM

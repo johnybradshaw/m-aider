@@ -1,20 +1,18 @@
 """Interactive recommendation command."""
 
 import click
-from rich.console import Console
 from rich.panel import Panel
 from rich.prompt import Prompt
 from rich.table import Table
 
 from ..benchmark_db import BenchmarkDatabase
+from ..output import console
 from ..recommendations import (
-    RecommendationEngine,
-    TaskType,
     BudgetConstraint,
     ModelSizePreference,
+    RecommendationEngine,
+    TaskType,
 )
-
-console = Console()
 CHOICE_PROMPT = "\nChoice"
 
 

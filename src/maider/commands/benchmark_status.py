@@ -3,13 +3,11 @@
 from datetime import datetime, timedelta
 
 import click
-from rich.console import Console
 from rich.table import Table
 
 from ..benchmark_db import BenchmarkDatabase
+from ..output import console
 from ..providers.linode import GPU_TYPES
-
-console = Console()
 
 
 @click.command(name="benchmark-status")

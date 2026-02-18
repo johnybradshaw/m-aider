@@ -1,14 +1,12 @@
 """List all VM sessions."""
 
 import click
-from rich.console import Console
 from rich.table import Table
 
 from ..config import Config
 from ..linode_client import LinodeManager
+from ..output import console
 from ..session import SessionManager
-
-console = Console()
 
 
 @click.command(name="list")
