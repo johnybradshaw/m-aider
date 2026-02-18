@@ -250,6 +250,58 @@ def _calculate_suggested_max_len(model_max: int) -> int:
     return model_max
 
 
+def prompt_for_max_len_adjustment(result: ValidationResult, current_max_len: int) -> int:
+    """Prompt user to choose how to handle a max_model_len validation failure.
+
+    Shows options to use the suggested value, override anyway, or cancel.
+
+    Args:
+        result: The failed ValidationResult from validate_max_model_len
+        current_max_len: The currently configured max_model_len value
+
+    Returns:
+        The chosen max_model_len value (suggested or original)
+
+    Raises:
+        SystemExit(0): If the user chooses to cancel the operation
+    """
+    import sys
+
+    from .output import console
+
+    console.print("\n[red]Configuration Error:[/red]")
+    console.print(
+        f"  max_model_len={current_max_len} exceeds the model's "
+        f"max_position_embeddings={result.model_max_len}"
+    )
+    console.print("\n  This will cause vLLM to fail with a validation error unless you set")
+    console.print("  VLLM_ALLOW_LONG_MAX_MODEL_LEN=1 (which can cause NaN values or crashes)")
+
+    console.print("\n[bold]Options:[/bold]")
+    console.print(f"  [1] Use suggested value: {result.suggested_max_len} (Recommended)")
+    console.print("  [2] Override anyway (risky - may cause NaN or crashes)")
+    console.print("  [3] Cancel")
+
+    while True:
+        choice = input("\nSelect option [1/2/3]: ").strip()
+        if choice == "1":
+            console.print(f"[green]✓[/green] Using max_model_len={result.suggested_max_len}")
+            return result.suggested_max_len
+        elif choice == "2":
+            console.print(
+                f"[yellow]Warning:[/yellow] Proceeding with max_model_len={current_max_len}"
+            )
+            console.print(
+                "  vLLM will require VLLM_ALLOW_LONG_MAX_MODEL_LEN=1 environment variable"
+            )
+            return current_max_len
+        elif choice == "3":
+            console.print("Cancelled")
+            sys.exit(0)
+        else:
+            console.print("[red]Invalid choice. Please enter 1, 2, or 3.[/red]")
+
+
 def get_model_context_limit(
     model_id: str,
     hf_token: Optional[str] = None,

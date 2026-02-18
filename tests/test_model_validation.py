@@ -8,10 +8,11 @@ import requests
 from src.maider.model_validation import (
     ModelConfigInfo,
     ValidationResult,
+    _calculate_suggested_max_len,
     fetch_model_config,
     get_model_context_limit,
+    prompt_for_max_len_adjustment,
     validate_max_model_len,
-    _calculate_suggested_max_len,
     KNOWN_CONTEXT_LENGTHS,
 )
 
@@ -285,6 +286,53 @@ class TestCalculateSuggestedMaxLen:
     def test_returns_model_max_when_small(self):
         """Test returns model max when smaller than 1024."""
         assert _calculate_suggested_max_len(512) == 512
+
+
+@pytest.mark.unit
+class TestPromptForMaxLenAdjustment:
+    """Test prompt_for_max_len_adjustment function."""
+
+    def _make_failed_result(
+        self, current_max_len: int = 65536, model_max_len: int = 32768
+    ) -> ValidationResult:
+        return ValidationResult(
+            is_valid=False,
+            model_id="test/model",
+            requested_max_len=current_max_len,
+            model_max_len=model_max_len,
+            suggested_max_len=_calculate_suggested_max_len(model_max_len),
+            allow_override=True,
+        )
+
+    @patch("builtins.input", return_value="1")
+    def test_choice_1_returns_suggested_value(self, mock_input):
+        """Test that choosing option 1 returns the suggested value."""
+        result = self._make_failed_result()
+        chosen = prompt_for_max_len_adjustment(result, 65536)
+        assert chosen == result.suggested_max_len
+
+    @patch("builtins.input", return_value="2")
+    def test_choice_2_returns_original_value(self, mock_input):
+        """Test that choosing option 2 returns the original value."""
+        result = self._make_failed_result()
+        chosen = prompt_for_max_len_adjustment(result, 65536)
+        assert chosen == 65536
+
+    @patch("builtins.input", return_value="3")
+    def test_choice_3_exits(self, mock_input):
+        """Test that choosing option 3 calls sys.exit(0)."""
+        result = self._make_failed_result()
+        with pytest.raises(SystemExit) as exc_info:
+            prompt_for_max_len_adjustment(result, 65536)
+        assert exc_info.value.code == 0
+
+    @patch("builtins.input", side_effect=["invalid", "1"])
+    def test_invalid_choice_prompts_again(self, mock_input):
+        """Test that invalid input prompts the user again."""
+        result = self._make_failed_result()
+        chosen = prompt_for_max_len_adjustment(result, 65536)
+        assert chosen == result.suggested_max_len
+        assert mock_input.call_count == 2
 
 
 @pytest.mark.unit

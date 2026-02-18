@@ -10,7 +10,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from ..compose import ComposeRuntime
 from ..config import Config
-from ..model_validation import validate_max_model_len
+from ..model_validation import prompt_for_max_len_adjustment, validate_max_model_len
 from ..output import console
 from ..session import SessionManager
 
@@ -126,38 +126,7 @@ def _validate_and_adjust_max_len(
             )
         return max_model_len
 
-    # Validation failed - max_model_len exceeds model limits
-    console.print("\n[red]Configuration Error:[/red]")
-    console.print(
-        f"  max_model_len={max_model_len} exceeds the model's "
-        f"max_position_embeddings={result.model_max_len}"
-    )
-    console.print("\n  This will cause vLLM to fail with a validation error unless you set")
-    console.print("  VLLM_ALLOW_LONG_MAX_MODEL_LEN=1 (which can cause NaN values or crashes)")
-
-    console.print("\n[bold]Options:[/bold]")
-    console.print(f"  [1] Use suggested value: {result.suggested_max_len} (Recommended)")
-    console.print("  [2] Override anyway (risky - may cause NaN or crashes)")
-    console.print("  [3] Cancel")
-
-    while True:
-        choice = input("\nSelect option [1/2/3]: ").strip()
-        if choice == "1":
-            console.print(f"[green]✓[/green] Using max_model_len={result.suggested_max_len}")
-            return result.suggested_max_len
-        elif choice == "2":
-            console.print(
-                f"[yellow]Warning:[/yellow] Proceeding with max_model_len={max_model_len}"
-            )
-            console.print(
-                "  vLLM will require VLLM_ALLOW_LONG_MAX_MODEL_LEN=1 environment variable"
-            )
-            return max_model_len
-        elif choice == "3":
-            console.print("Cancelled")
-            sys.exit(0)
-        else:
-            console.print("[red]Invalid choice. Please enter 1, 2, or 3.[/red]")
+    return prompt_for_max_len_adjustment(result, max_model_len)
 
 
 def _print_plan(session, model_id: str, served_name: str, max_len: int, tensor_parallel: int):

@@ -11,7 +11,7 @@ from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from ..config import Config
 from ..linode_client import LinodeManager
-from ..model_validation import validate_max_model_len
+from ..model_validation import prompt_for_max_len_adjustment, validate_max_model_len
 from ..output import console
 from ..session import SessionManager
 from ..watchdog import start_watchdog_background
@@ -103,40 +103,7 @@ def _validate_max_model_len_or_adjust(config: Config):
             )
         return
 
-    # Validation failed - max_model_len exceeds model limits
-    console.print("\n[red]Configuration Error:[/red]")
-    console.print(
-        f"  VLLM_MAX_MODEL_LEN={config.vllm_max_model_len} exceeds the model's "
-        f"max_position_embeddings={result.model_max_len}"
-    )
-    console.print("\n  This will cause vLLM to fail with a validation error unless you set")
-    console.print("  VLLM_ALLOW_LONG_MAX_MODEL_LEN=1 (which can cause NaN values or crashes)")
-
-    console.print("\n[bold]Options:[/bold]")
-    console.print(f"  [1] Use suggested value: {result.suggested_max_len} (Recommended)")
-    console.print("  [2] Override anyway (risky - may cause NaN or crashes)")
-    console.print("  [3] Cancel")
-
-    while True:
-        choice = input("\nSelect option [1/2/3]: ").strip()
-        if choice == "1":
-            console.print(f"[green]✓[/green] Using max_model_len={result.suggested_max_len}")
-            config.vllm_max_model_len = result.suggested_max_len
-            return
-        elif choice == "2":
-            console.print(
-                "[yellow]Warning:[/yellow] Proceeding with "
-                f"max_model_len={config.vllm_max_model_len}"
-            )
-            console.print(
-                "  vLLM will require VLLM_ALLOW_LONG_MAX_MODEL_LEN=1 environment variable"
-            )
-            return
-        elif choice == "3":
-            console.print("Cancelled")
-            sys.exit(0)
-        else:
-            console.print("[red]Invalid choice. Please enter 1, 2, or 3.[/red]")
+    config.vllm_max_model_len = prompt_for_max_len_adjustment(result, config.vllm_max_model_len)
 
 
 def _print_config(config: Config, gpu_count: int, hourly_cost: float):
