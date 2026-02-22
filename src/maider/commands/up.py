@@ -16,6 +16,7 @@ from ..output import console
 from ..session import SessionManager
 from ..watchdog import start_watchdog_background
 from ..healing import check_and_heal_vllm
+
 PROGRESS_TEXT = "[progress.description]{task.description}"
 SSH_CONNECT_TIMEOUT = "ConnectTimeout=5"
 SSH_STRICT_HOST_KEY = "StrictHostKeyChecking=no"
