@@ -122,7 +122,7 @@ class Watchdog:
 
             # Destroy if timeout reached
             if idle_minutes >= self.timeout_minutes:
-                timestamp = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 print(f"{timestamp} - Timeout reached, destroying VM")
                 self.send_notification(
                     "Linode Watchdog",

@@ -50,7 +50,7 @@ def cmd(session_name: str, interval: int):
 
 def _clear_screen():
     """Clear the terminal screen."""
-    os.system('clear' if os.name == 'posix' else 'cls')
+    os.system("clear" if os.name == "posix" else "cls")
 
 
 def _get_session_or_exit(session_mgr: SessionManager, session_name: str):

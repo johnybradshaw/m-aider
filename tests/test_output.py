@@ -1,9 +1,6 @@
 """Tests for the output module."""
 
-import pytest
-from io import StringIO
-
-from src.maider.output import QuietConsole, set_quiet, is_quiet, console
+from src.maider.output import QuietConsole, console, is_quiet, set_quiet
 
 
 class TestQuietConsole:
