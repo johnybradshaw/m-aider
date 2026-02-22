@@ -192,7 +192,10 @@ class VLLMHealer:
                         "-o",
                         SSH_CONNECT_TIMEOUT,
                         f"root@{self.ip}",
-                        f"sed -i 's/^{key}=.*/{key}={value}/' /opt/llm/.env || echo '{key}={value}' >> /opt/llm/.env",
+                        (
+                            f"sed -i 's/^{key}=.*/{key}={value}/' /opt/llm/.env || "
+                            f"echo '{key}={value}' >> /opt/llm/.env"
+                        ),
                     ]
                     subprocess.run(cmd, check=True, capture_output=True, timeout=10)
 

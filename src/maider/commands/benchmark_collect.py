@@ -3,12 +3,10 @@
 import sys
 
 import click
-from rich.console import Console
 
+from ..output import console
 from ..session import SessionManager
 from . import benchmark
-
-console = Console()
 
 
 @click.command(name="benchmark-collect")

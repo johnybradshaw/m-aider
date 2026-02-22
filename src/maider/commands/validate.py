@@ -2,12 +2,10 @@
 
 import sys
 import click
-from rich.console import Console
 
 from ..config import Config
+from ..output import console
 from ..providers.base import ProviderType
-
-console = Console()
 
 
 def get_gpu_regions_for_provider(provider: str) -> set:
@@ -55,8 +53,8 @@ def cmd():
     gpu_regions = get_gpu_regions_for_provider(config.provider)
     if config.region and gpu_regions and config.region not in gpu_regions:
         errors.append(
-            f"Region '{config.region}' does not support GPU instances for provider '{config.provider}'. "
-            f"GPU-capable regions: {', '.join(sorted(gpu_regions))}"
+            f"Region '{config.region}' does not support GPU instances for "
+            f"provider '{config.provider}'. GPU regions: {', '.join(sorted(gpu_regions))}"
         )
 
     if errors:
@@ -88,8 +86,8 @@ def cmd():
     # Validate tensor parallel size
     if config.vllm_tensor_parallel_size != gpu_count:
         console.print(
-            f"[yellow]⚠ Warning:[/yellow] VLLM_TENSOR_PARALLEL_SIZE ({config.vllm_tensor_parallel_size}) "
-            f"doesn't match GPU count ({gpu_count})"
+            f"[yellow]⚠ Warning:[/yellow] VLLM_TENSOR_PARALLEL_SIZE "
+            f"({config.vllm_tensor_parallel_size}) doesn't match GPU count ({gpu_count})"
         )
         console.print(f"  Recommendation: Set VLLM_TENSOR_PARALLEL_SIZE={gpu_count}")
         console.print()

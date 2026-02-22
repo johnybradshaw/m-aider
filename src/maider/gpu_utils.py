@@ -44,7 +44,10 @@ class GPUMonitor:
 
     def get_gpu_info(self) -> list[GPUInfo]:
         """Get information about all GPUs."""
-        query = "nvidia-smi --query-gpu=index,name,memory.used,memory.total,utilization.gpu --format=csv,noheader,nounits"
+        query = (
+            "nvidia-smi --query-gpu=index,name,memory.used,memory.total,"
+            "utilization.gpu --format=csv,noheader,nounits"
+        )
         output = self.ssh.run_output(query)
 
         if not output:

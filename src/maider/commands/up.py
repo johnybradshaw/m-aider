@@ -7,16 +7,16 @@ from pathlib import Path
 
 import click
 import requests
-from rich.console import Console
 from rich.progress import Progress, SpinnerColumn, TextColumn
 
 from ..config import Config
 from ..linode_client import LinodeManager
+from ..model_validation import prompt_for_max_len_adjustment, validate_max_model_len
+from ..output import console
 from ..session import SessionManager
 from ..watchdog import start_watchdog_background
 from ..healing import check_and_heal_vllm
 
-console = Console()
 PROGRESS_TEXT = "[progress.description]{task.description}"
 SSH_CONNECT_TIMEOUT = "ConnectTimeout=5"
 SSH_STRICT_HOST_KEY = "StrictHostKeyChecking=no"
@@ -34,6 +34,7 @@ def cmd(name: str, launch_aider: bool):
     _validate_config_or_exit(config)
 
     gpu_count = _sync_tensor_parallel(config)
+    _validate_max_model_len_or_adjust(config)
     hourly_cost = config.get_hourly_cost()
     _print_config(config, gpu_count, hourly_cost)
 
@@ -75,12 +76,35 @@ def _sync_tensor_parallel(config: Config) -> int:
     gpu_count = config.get_gpu_count()
     if config.vllm_tensor_parallel_size != gpu_count:
         console.print(
-            f"[yellow]Warning:[/yellow] VLLM_TENSOR_PARALLEL_SIZE ({config.vllm_tensor_parallel_size}) "
-            f"doesn't match GPU count ({gpu_count})"
+            f"[yellow]Warning:[/yellow] VLLM_TENSOR_PARALLEL_SIZE "
+            f"({config.vllm_tensor_parallel_size}) doesn't match GPU count ({gpu_count})"
         )
         console.print(f"Auto-correcting to {gpu_count}")
         config.vllm_tensor_parallel_size = gpu_count
     return gpu_count
+
+
+def _validate_max_model_len_or_adjust(config: Config):
+    """Validate max_model_len against the model's actual limits.
+
+    If validation fails, prompts the user to use a corrected value,
+    override anyway, or cancel.
+    """
+    console.print("\n[bold]Validating model configuration...[/bold]")
+
+    result = validate_max_model_len(config.model_id, config.vllm_max_model_len, config.hf_token)
+
+    if result.is_valid:
+        if result.warning:
+            console.print(f"[yellow]Warning:[/yellow] {result.warning}")
+        else:
+            console.print(
+                f"[green]✓[/green] max_model_len={config.vllm_max_model_len} is valid "
+                f"(model limit: {result.model_max_len})"
+            )
+        return
+
+    config.vllm_max_model_len = prompt_for_max_len_adjustment(result, config.vllm_max_model_len)
 
 
 def _print_config(config: Config, gpu_count: int, hourly_cost: float):
@@ -174,7 +198,8 @@ def _start_watchdog_if_enabled(session, config: Config):
         return
     console.print("[bold]Starting watchdog...[/bold]")
     console.print(
-        f"[dim]VM will auto-destroy after {config.watchdog_timeout_minutes} minutes of inactivity[/dim]\n"
+        f"[dim]VM will auto-destroy after {config.watchdog_timeout_minutes} "
+        "minutes of inactivity[/dim]\n"
     )
 
     try:

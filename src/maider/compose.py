@@ -25,6 +25,7 @@ class ComposeRuntime:
     vllm_port: int
     webui_port: int
     enable_openwebui: bool
+    openwebui_auth: bool
     enable_hf_cache: bool
     enable_healthchecks: bool
     enable_nccl_env: bool
@@ -50,6 +51,7 @@ def runtime_from_config(
         vllm_port=config.vllm_port,
         webui_port=config.webui_port,
         enable_openwebui=config.enable_openwebui,
+        openwebui_auth=config.openwebui_auth,
         enable_hf_cache=config.enable_hf_cache,
         enable_healthchecks=config.enable_healthchecks,
         enable_nccl_env=config.enable_nccl_env,
@@ -162,15 +164,20 @@ def render_compose(runtime: ComposeRuntime) -> str:
     openwebui_service = ""
     if runtime.enable_openwebui:
         webui_healthcheck = _webui_healthcheck() if runtime.enable_healthchecks else ""
+        webui_env = [
+            "    environment:",
+            "      - OPENAI_API_BASE_URL=http://vllm:8000/v1",
+            "      - OPENAI_API_KEY=sk-dummy",
+        ]
+        if not runtime.openwebui_auth:
+            webui_env.append("      - WEBUI_AUTH=False")
         openwebui_service = "\n".join(
             [
                 "  openwebui:",
                 "    image: ${OPENWEBUI_IMAGE}",
                 "    ports:",
                 '      - "127.0.0.1:${WEBUI_PORT}:8080"',
-                "    environment:",
-                "      - OPENAI_API_BASE_URL=http://vllm:8000/v1",
-                "      - OPENAI_API_KEY=sk-dummy",
+                *webui_env,
                 "    volumes:",
                 "      - openwebui_data:/app/backend/data",
                 "    depends_on:",
@@ -189,8 +196,6 @@ def render_compose(runtime: ComposeRuntime) -> str:
     return (
         "\n".join(
             [
-                'version: "3.8"',
-                "",
                 "services:",
                 "  vllm:",
                 "    image: ${VLLM_IMAGE}",

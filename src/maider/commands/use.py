@@ -3,13 +3,11 @@
 import sys
 
 import click
-from rich.console import Console
 
-from ..session import SessionManager
-from ..linode_client import LinodeManager
 from ..config import Config
-
-console = Console()
+from ..linode_client import LinodeManager
+from ..output import console
+from ..session import SessionManager
 
 
 @click.command(name="use")
