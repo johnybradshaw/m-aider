@@ -13,6 +13,7 @@ from ..recommendations import (
     RecommendationEngine,
     TaskType,
 )
+
 CHOICE_PROMPT = "\nChoice"
 
 

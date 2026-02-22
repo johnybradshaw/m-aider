@@ -13,6 +13,7 @@ from ..output import console
 # Import GPU data from provider abstraction
 from ..providers.linode import GPU_REGIONS as LINODE_GPU_REGIONS
 from ..providers.linode import GPU_TYPES as LINODE_GPU_TYPES
+
 CHOICE_PROMPT = "\nChoice"
 
 

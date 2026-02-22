@@ -17,10 +17,11 @@ from ..ssh_utils import SSHClient
 @click.command(name="watch")
 @click.argument("session_name", required=False)
 @click.option(
-    "--interval", "-i",
+    "--interval",
+    "-i",
     default=5,
     type=int,
-    help="Refresh interval in seconds (default: 5)"
+    help="Refresh interval in seconds (default: 5)",
 )
 def cmd(session_name: str, interval: int):
     """Continuously monitor VM health with live updates.

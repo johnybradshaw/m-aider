@@ -32,9 +32,10 @@ from .commands import (
 @click.group()
 @click.version_option()
 @click.option(
-    "--quiet", "-q",
+    "--quiet",
+    "-q",
     is_flag=True,
-    help="Suppress non-essential output. Errors are still shown."
+    help="Suppress non-essential output. Errors are still shown.",
 )
 def main(quiet: bool):
     """Linode GPU vLLM deployment tool for multi-card setups."""

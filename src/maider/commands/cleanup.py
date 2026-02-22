@@ -13,7 +13,9 @@ from ..session import SessionManager
 
 @click.command(name="cleanup")
 @click.option(
-    "--session", "-s", help="Clean up a specific session (force-remove if --force is set)"
+    "--session",
+    "-s",
+    help="Clean up a specific session (force-remove if --force is set)",
 )
 @click.option("--force", "-f", is_flag=True, help="Force removal without checking if VM exists")
 def cmd(session: str, force: bool):
