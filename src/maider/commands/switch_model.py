@@ -61,10 +61,13 @@ def cmd(
     _generate_aider_metadata(served_name, final_max_model_len)
     _update_session_model(session_mgr, session, model_id, served_name)
 
-    _wait_for_api(session.ip, runtime)
-    _verify_model(session.ip, runtime.vllm_port, served_name)
-
-    console.print(f"\n[green]✓[/green] Successfully switched to {model_id}")
+    api_ready = _wait_for_api(session.ip, runtime)
+    if api_ready:
+        _verify_model(session.ip, runtime.vllm_port, served_name)
+        console.print(f"\n[green]✓[/green] Successfully switched to {model_id}")
+    else:
+        console.print("\n[yellow]⚠[/yellow] Model switch initiated but API did not respond in time")
+        console.print("[dim]The model may still be loading. Check with: maider status[/dim]")
     console.print("\n[dim]Restart aider to use the new model[/dim]")
 
 
@@ -246,12 +249,14 @@ def _restart_containers(ip: str):
             sys.exit(1)
 
 
-def _wait_for_api(ip: str, runtime: ComposeRuntime):
+def _wait_for_api(ip: str, runtime: ComposeRuntime) -> bool:
+    """Wait for the vLLM API to become ready. Returns True if ready, False on timeout."""
     console.print("\n[bold]Waiting for vLLM API...[/bold]")
     console.print("[dim](This may take 10-20 minutes for model download)[/dim]")
 
     max_wait = 1200  # 20 minutes
     start_time = time.time()
+    api_ready = False
 
     with Progress(
         SpinnerColumn(),
@@ -276,18 +281,21 @@ def _wait_for_api(ip: str, runtime: ComposeRuntime):
                 # {"object": "list", "data": [...]} when ready
                 if result.returncode == 0 and '"data"' in result.stdout:
                     progress.update(task, completed=True)
+                    api_ready = True
                     break
             except subprocess.TimeoutExpired:
                 pass
 
             time.sleep(5)
-        else:
-            console.print("[yellow]⚠ Timeout waiting for API[/yellow]")
-            console.print("[dim]The model may still be loading. Check status with:[/dim]")
-            console.print(f"  [cyan]ssh root@{ip} docker logs -f vllm[/cyan]")
-            # Don't exit - session metadata is already updated
 
-    console.print("[green]✓[/green] API ready")
+    if api_ready:
+        console.print("[green]✓[/green] API ready")
+    else:
+        console.print("[yellow]⚠ Timeout waiting for API[/yellow]")
+        console.print("[dim]The model may still be loading. Check status with:[/dim]")
+        console.print(f"  [cyan]ssh root@{ip} docker logs -f vllm[/cyan]")
+
+    return api_ready
 
 
 def _verify_model(ip: str, vllm_port: int, served_name: str):

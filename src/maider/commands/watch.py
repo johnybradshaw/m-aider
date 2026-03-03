@@ -86,7 +86,7 @@ def _print_status(session, gpu_monitor: GPUMonitor):
     console.print(f"\n{api_status}")
 
     # Session Info
-    runtime_hours = session.get_runtime_hours()
+    runtime_hours = session.runtime_hours
     cost = runtime_hours * session.hourly_cost
     console.print(
         f"\n[dim]Runtime: {runtime_hours:.2f}h | "
@@ -140,9 +140,10 @@ def _print_gpu_table(gpu_monitor: GPUMonitor):
 
 def _check_api_status(session) -> str:
     """Check vLLM API status."""
+    vllm_port = os.getenv("VLLM_PORT", "8000")
     try:
         response = requests.get(
-            "http://localhost:8000/v1/models",
+            f"http://localhost:{vllm_port}/v1/models",
             timeout=5,
         )
         if response.status_code == 200:

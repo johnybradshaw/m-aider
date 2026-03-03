@@ -5,10 +5,13 @@ max_model_len doesn't exceed the model's actual max_position_embeddings.
 """
 
 import logging
+import sys
 from dataclasses import dataclass
 from typing import Optional
 
 import requests
+
+from .output import console
 
 logger = logging.getLogger(__name__)
 
@@ -265,10 +268,6 @@ def prompt_for_max_len_adjustment(result: ValidationResult, current_max_len: int
     Raises:
         SystemExit(0): If the user chooses to cancel the operation
     """
-    import sys
-
-    from .output import console
-
     console.print("\n[red]Configuration Error:[/red]")
     console.print(
         f"  max_model_len={current_max_len} exceeds the model's "
@@ -283,7 +282,7 @@ def prompt_for_max_len_adjustment(result: ValidationResult, current_max_len: int
     console.print("  [3] Cancel")
 
     while True:
-        choice = input("\nSelect option [1/2/3]: ").strip()
+        choice = console.input("\nSelect option [1/2/3]: ").strip()
         if choice == "1":
             console.print(f"[green]✓[/green] Using max_model_len={result.suggested_max_len}")
             return result.suggested_max_len
