@@ -35,6 +35,7 @@ class QuietConsole:
         if self._quiet:
             # Return a no-op context manager
             from contextlib import nullcontext
+
             return nullcontext()
         return self._console.status(*args, **kwargs)
 

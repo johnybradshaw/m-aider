@@ -86,9 +86,7 @@ def _require_token_or_exit(config: Config, session):
     )
     console.print(
         "[yellow]⚠ VM {}/{} is still running and will continue "
-        "to cost ${:.2f}/hour![/yellow]".format(
-            session.linode_id, session.ip, session.hourly_cost
-        )
+        "to cost ${:.2f}/hour![/yellow]".format(session.linode_id, session.ip, session.hourly_cost)
     )
     sys.exit(1)
 
