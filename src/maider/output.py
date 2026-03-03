@@ -1,5 +1,7 @@
 """Centralized output handling with quiet mode support."""
 
+import builtins
+
 from rich.console import Console as RichConsole
 
 
@@ -44,9 +46,9 @@ class QuietConsole:
         if not self._quiet:
             self._console.rule(*args, **kwargs)
 
-    def input(self, *args, **kwargs):
+    def input(self, prompt=""):
         """Get user input (always available)."""
-        return self._console.input(*args, **kwargs)
+        return builtins.input(prompt)
 
     @property
     def is_terminal(self) -> bool:
