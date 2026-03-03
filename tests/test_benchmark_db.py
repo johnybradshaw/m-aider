@@ -27,7 +27,7 @@ class TestBenchmarkDatabase:
             "gpu_count": 2,
             "vram_per_gpu": 48,
             "hourly_cost": 3.00,
-            "model_id": "Qwen/Qwen2.5-Coder-70B-Instruct-AWQ",
+            "model_id": "Qwen/Qwen2.5-72B-Instruct-AWQ",
             "model_category": "70b",
             "vllm_config": {
                 "tensor_parallel_size": 2,

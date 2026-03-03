@@ -5,14 +5,12 @@ import time
 import requests
 
 import click
-from rich.console import Console
 from rich.table import Table
 
+from ..gpu_utils import GPUMonitor
+from ..output import console
 from ..session import SessionManager
 from ..ssh_utils import SSHClient
-from ..gpu_utils import GPUMonitor
-
-console = Console()
 
 
 @click.command(name="check")

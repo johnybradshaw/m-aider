@@ -16,8 +16,8 @@ class TestModelCategorization:
 
     def test_get_model_category_70b(self):
         """Test 70B model detection."""
-        assert get_model_category("Qwen/Qwen2.5-Coder-70B-Instruct-AWQ") == "70b"
-        assert get_model_category("deepseek-ai/DeepSeek-Coder-70B-Instruct") == "70b"
+        assert get_model_category("Qwen/Qwen2.5-72B-Instruct-AWQ") == "70b"
+        assert get_model_category("meta-llama/Llama-3.1-70B-Instruct") == "70b"
         assert get_model_category("Llama-3-72B-Instruct") == "70b"
 
     def test_get_model_category_30b(self):
@@ -44,7 +44,7 @@ class TestModelCategorization:
 
     def test_get_quantization_type_awq(self):
         """Test AWQ quantization detection."""
-        assert get_quantization_type("Qwen/Qwen2.5-Coder-70B-Instruct-AWQ") == "awq"
+        assert get_quantization_type("Qwen/Qwen2.5-72B-Instruct-AWQ") == "awq"
         assert get_quantization_type("model-awq") == "awq"
 
     def test_get_quantization_type_gptq(self):
@@ -59,7 +59,7 @@ class TestModelCategorization:
 
     def test_get_quantization_type_full(self):
         """Test full precision detection."""
-        assert get_quantization_type("Qwen/Qwen2.5-Coder-70B-Instruct") == "full"
+        assert get_quantization_type("Qwen/Qwen2.5-72B-Instruct") == "full"
         assert get_quantization_type("some-random-model") == "full"
 
 
@@ -231,17 +231,17 @@ class TestContextLengthRecommendation:
 class TestModelConfigDefaults:
     """Test model config default values."""
 
-    def test_qwen_70b_awq_config(self):
-        """Test Qwen 70B AWQ model config."""
+    def test_qwen_72b_awq_config(self):
+        """Test Qwen 72B AWQ model config (general purpose, for 70b+ category)."""
         models = get_recommended_models(96, prefer_quantized=True)
 
-        qwen_70b = next((m for m in models if "70B" in m.id and "AWQ" in m.id), None)
+        qwen_72b = next((m for m in models if "72B" in m.id and "AWQ" in m.id), None)
 
-        assert qwen_70b is not None
-        assert qwen_70b.category == "70b"
-        assert qwen_70b.quantization == "awq"
-        assert qwen_70b.min_vram_gb >= 60  # Should require at least 60GB
-        assert qwen_70b.recommended_context == 32768
+        assert qwen_72b is not None
+        assert qwen_72b.category == "70b"
+        assert qwen_72b.quantization == "awq"
+        assert qwen_72b.min_vram_gb >= 60  # Should require at least 60GB
+        assert qwen_72b.recommended_context == 32768
 
     def test_qwen_32b_awq_config(self):
         """Test Qwen 32B AWQ model config."""

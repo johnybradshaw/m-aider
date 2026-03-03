@@ -124,7 +124,7 @@ HUGGING_FACE_HUB_TOKEN=hf_xxx
 FIREWALL_ID=243627
 REGION=us-east
 TYPE=g1-gpu-rtx6000-2
-MODEL_ID=Qwen/Qwen2.5-Coder-70B-Instruct-AWQ
+MODEL_ID=Qwen/Qwen2.5-72B-Instruct-AWQ
 SERVED_MODEL_NAME=coder-70b
 
 # Multi-GPU configuration
@@ -295,7 +295,7 @@ maider list-types --refresh    # Force refresh from API
 cat > .env <<EOF
 REGION=us-east
 TYPE=g1-gpu-rtx6000-2
-MODEL_ID=Qwen/Qwen2.5-Coder-70B-Instruct-AWQ
+MODEL_ID=Qwen/Qwen2.5-72B-Instruct-AWQ
 VLLM_TENSOR_PARALLEL_SIZE=2
 VLLM_MAX_MODEL_LEN=32768
 EOF
@@ -654,7 +654,7 @@ Location: `~/.cache/linode-vms/benchmark-database.json`
       "vram_per_gpu": 48,
       "total_vram": 96,
       "hourly_cost": 3.00,
-      "model_id": "Qwen/Qwen2.5-Coder-70B-Instruct-AWQ",
+      "model_id": "Qwen/Qwen2.5-72B-Instruct-AWQ",
       "model_category": "70b",
       "vllm_config": {
         "tensor_parallel_size": 2,
@@ -693,10 +693,10 @@ Auto-selects appropriate models based on VRAM capacity:
 | 20GB (RTX4000x1) | 7b-14b | Qwen2.5-Coder-14B-Instruct-AWQ |
 | 40GB (RTX4000x2) | 30b | Qwen2.5-Coder-32B-Instruct-AWQ |
 | 48GB (RTX6000x1) | 30b | Qwen2.5-Coder-32B-Instruct |
-| 80GB (RTX4000x4) | 70b | Qwen2.5-Coder-70B-Instruct-AWQ |
-| 96GB (RTX6000x2) | 70b | Qwen2.5-Coder-70B-Instruct-AWQ |
-| 144GB (RTX6000x3) | 70b-full | Qwen2.5-Coder-70B-Instruct (full) |
-| 192GB (RTX6000x4) | 70b-full | Qwen2.5-Coder-70B-Instruct (full) |
+| 80GB (RTX4000x4) | 70b | Qwen2.5-72B-Instruct-AWQ (general) |
+| 96GB (RTX6000x2) | 70b | Qwen2.5-72B-Instruct-AWQ (general) |
+| 144GB (RTX6000x3) | 70b-full | Qwen2.5-72B-Instruct (full, general) |
+| 192GB (RTX6000x4) | 70b-full | Qwen2.5-72B-Instruct (full, general) |
 
 **Prioritization**:
 - Quantized models (AWQ/GPTQ) preferred for efficiency (90%+ quality at 25% VRAM)
@@ -886,7 +886,7 @@ Switch to a different model on a running VM without destroying it:
 
 ```bash
 maider switch-model Qwen/Qwen2.5-Coder-14B-Instruct-AWQ
-maider switch-model Qwen/Qwen2.5-Coder-70B-Instruct my-session
+maider switch-model Qwen/Qwen2.5-72B-Instruct my-session
 ```
 
 **What happens**: Generates new docker-compose.yml, uploads via SSH, restarts vLLM container, waits for model download (10-20 min), updates local metadata.

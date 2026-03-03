@@ -2,13 +2,11 @@
 
 import sys
 import click
-from rich.console import Console
 from rich.table import Table
 
 from ..config import Config
+from ..output import console
 from ..providers.linode import LinodeProvider
-
-console = Console()
 
 
 @click.command(name="list-types")

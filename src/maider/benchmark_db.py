@@ -206,7 +206,9 @@ class BenchmarkDatabase:
         Returns:
             Dictionary with coverage information:
             {
-                "tested_configs": [{"gpu_type": str, "model_category": str, "count": int, "last_run": str}],
+                "tested_configs": [
+                    {"gpu_type": str, "model_category": str, "count": int, "last_run": str}
+                ],
                 "total_benchmarks": int,
                 "gpu_types_tested": int,
                 "gpu_types_total": int,

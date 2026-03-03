@@ -4,12 +4,10 @@ from pathlib import Path
 from typing import Optional
 
 import click
-from rich.console import Console
 from rich.table import Table
 
 from ..benchmark_db import BenchmarkDatabase
-
-console = Console()
+from ..output import console
 
 METRIC_SORTS = {"tokens_per_sec", "cost_per_1k_tokens", "cost_efficiency"}
 

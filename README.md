@@ -297,7 +297,7 @@ maider wizard
 Or manually in `.env`:
 ```bash
 TYPE=g1-gpu-rtx6000-2                    # 2x RTX 6000 Ada (96GB total)
-MODEL_ID=Qwen/Qwen2.5-Coder-70B-Instruct-AWQ
+MODEL_ID=Qwen/Qwen2.5-72B-Instruct-AWQ   # General 72B (Coder maxes at 32B)
 VLLM_TENSOR_PARALLEL_SIZE=2              # MUST match GPU count
 VLLM_MAX_MODEL_LEN=32768
 ```
@@ -333,7 +333,7 @@ maider validate
 | Budget coding assistant | Qwen2.5-Coder-7B-Instruct-AWQ | `g2-gpu-rtx4000a1-s` | $0.52 | 16K |
 | Balanced performance | Qwen2.5-Coder-14B-Instruct-AWQ | `g2-gpu-rtx4000a1-s` | $0.52 | 16K |
 | Strong coder | Qwen2.5-Coder-32B-Instruct-AWQ | `g1-gpu-rtx6000-1` | $1.50 | 32K |
-| Maximum capability | Qwen2.5-Coder-70B-Instruct-AWQ | `g1-gpu-rtx6000-2` | $3.00 | 32K |
+| Maximum capability | Qwen2.5-72B-Instruct-AWQ | `g1-gpu-rtx6000-2` | $3.00 | 32K |
 
 ### General Guidelines
 
@@ -474,7 +474,7 @@ If you prefer not to use the wizard:
 
 Override vLLM parameters when switching models:
 ```bash
-maider switch-model Qwen/Qwen2.5-Coder-70B-Instruct \
+maider switch-model Qwen/Qwen2.5-72B-Instruct \
   --max-model-len 65536 \
   --tensor-parallel-size 4
 ```

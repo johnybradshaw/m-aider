@@ -61,6 +61,7 @@ class Config:
         self.webui_port = int(os.getenv("WEBUI_PORT", "3000"))
         self.perf_profile = os.getenv("PERF_PROFILE", "B").upper()
         self.enable_openwebui = os.getenv("ENABLE_OPENWEBUI", "true").lower() == "true"
+        self.openwebui_auth = os.getenv("OPENWEBUI_AUTH", "true").lower() == "true"
         self.enable_hf_cache = os.getenv("ENABLE_HF_CACHE", "true").lower() == "true"
         self.enable_healthchecks = os.getenv("ENABLE_HEALTHCHECKS", "false").lower() == "true"
         self.enable_nccl_env = os.getenv("ENABLE_NCCL_ENV", "false").lower() == "true"

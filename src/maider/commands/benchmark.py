@@ -8,15 +8,13 @@ from typing import Optional, Dict, Any, List
 
 import click
 import requests
-from rich.console import Console
 from rich.table import Table
 
-from ..session import SessionManager
 from ..benchmark_db import BenchmarkDatabase
 from ..benchmark_models import get_model_category
+from ..output import console
 from ..providers.linode import GPU_TYPES
-
-console = Console()
+from ..session import SessionManager
 
 # Test prompts of varying complexity, organized by category
 TEST_PROMPTS = [
@@ -30,19 +28,46 @@ TEST_PROMPTS = [
     {
         "name": "Code review",
         "category": "coding",
-        "prompt": "Review this code and suggest improvements:\n\ndef process_data(data):\n    result = []\n    for i in range(len(data)):\n        if data[i] > 0:\n            result.append(data[i] * 2)\n    return result",
+        "prompt": """Review this code and suggest improvements:
+
+def process_data(data):
+    result = []
+    for i in range(len(data)):
+        if data[i] > 0:
+            result.append(data[i] * 2)
+    return result""",
         "expected_tokens": 200,
     },
     {
         "name": "Algorithm explanation",
         "category": "coding",
-        "prompt": "Explain how the quicksort algorithm works and provide a Python implementation with comments.",
+        "prompt": (
+            "Explain how the quicksort algorithm works and provide "
+            "a Python implementation with comments."
+        ),
         "expected_tokens": 400,
     },
     {
         "name": "Complex refactoring",
         "category": "coding",
-        "prompt": "Refactor this legacy code to use modern Python patterns, type hints, and better error handling:\n\nclass DataProcessor:\n    def __init__(self):\n        self.data = []\n    \n    def add(self, item):\n        self.data.append(item)\n    \n    def process(self):\n        results = []\n        for d in self.data:\n            try:\n                results.append(d * 2)\n            except:\n                pass\n        return results",
+        "prompt": """\
+Refactor this legacy code to use modern Python patterns, type hints, and error handling:
+
+class DataProcessor:
+    def __init__(self):
+        self.data = []
+
+    def add(self, item):
+        self.data.append(item)
+
+    def process(self):
+        results = []
+        for d in self.data:
+            try:
+                results.append(d * 2)
+            except:
+                pass
+        return results""",
         "expected_tokens": 500,
     },
     # Context-heavy tasks (4 prompts)
@@ -124,7 +149,8 @@ What's the likely root cause? How would you fix it?""",
     {
         "name": "Architecture explanation",
         "category": "context_heavy",
-        "prompt": """Explain the architecture of a production-ready microservices system for an e-commerce platform:
+        "prompt": """\
+Explain the architecture of a production-ready microservices system for e-commerce:
 
 Requirements:
 - Handle 100K+ concurrent users
@@ -168,7 +194,8 @@ What are the key technical challenges and how would you approach each one?""",
     {
         "name": "Design trade-offs analysis",
         "category": "reasoning",
-        "prompt": """Analyze the trade-offs between these database architectures for a social media platform:
+        "prompt": """\
+Analyze the trade-offs between these database architectures for social media:
 
 Option A: Single PostgreSQL database with read replicas
 Option B: Sharded PostgreSQL across multiple servers
@@ -209,7 +236,8 @@ Recommend the best approach for a production system.""",
     {
         "name": "System design",
         "category": "reasoning",
-        "prompt": """Design a URL shortener service (like bit.ly) that handles 1 billion URLs and 10 billion redirects per day.
+        "prompt": """\
+Design a URL shortener (like bit.ly) handling 1B URLs and 10B redirects per day.
 
 Consider:
 1. How do you generate short codes? (hash vs counter vs random)

@@ -60,16 +60,16 @@ nano .env  # Add your HUGGING_FACE_HUB_TOKEN and FIREWALL_ID
 #### `rtx6000-2gpu.env`
 - **Hardware**: 2x RTX 6000 Ada (96GB total VRAM)
 - **Cost**: ~$3.00/hour
-- **Best for**: 70B models with large context
-- **Recommended models**: Qwen2.5-Coder-70B-AWQ, Llama-3.1-70B-AWQ
+- **Best for**: 32B full-precision coder, 70B general models
+- **Recommended models**: Qwen2.5-Coder-32B (FP16), Qwen2.5-72B-Instruct-AWQ
 - **Context**: Up to 32-48K tokens
 - **Use case**: Production with large models, extensive context
 
 #### `rtx6000-4gpu.env`
 - **Hardware**: 4x RTX 6000 Ada (192GB total VRAM)
 - **Cost**: ~$6.00/hour
-- **Best for**: Full-precision 70B, massive context, 200B+ quantized
-- **Recommended models**: Qwen2.5-Coder-70B (FP16), DeepSeek-Coder-V2-236B-AWQ
+- **Best for**: 32B full-precision with huge context, 72B general models
+- **Recommended models**: Qwen2.5-Coder-32B (FP16), Qwen2.5-72B-Instruct
 - **Context**: Up to 64K+ tokens
 - **Use case**: Maximum quality, research, very large codebases
 
@@ -154,6 +154,33 @@ VLLM_GPU_MEMORY_UTILIZATION=0.95
 ```
 
 ## Model Selection Guide
+
+### Why Multi-GPU Presets Default to 32B Coder (Not 72B General)
+
+The multi-GPU presets (rtx6000-2gpu, rtx6000-4gpu) default to 32B Coder models
+in full precision rather than 72B general-purpose models. This is intentional:
+
+**For coding tasks, a specialized 32B coder with large context is more valuable
+than a general-purpose 72B model.** Here's why:
+
+| Aspect | 32B Coder (FP16) | 72B General (AWQ) |
+|--------|------------------|-------------------|
+| **Coding ability** | Optimized for code | General-purpose |
+| **Context window** | 32-65K tokens | 16-32K tokens |
+| **Response quality** | Excellent for code | Good for everything |
+| **Memory headroom** | More VRAM for context | Model uses more VRAM |
+| **Speed** | Faster inference | Slower inference |
+
+**The trade-off**: 72B models have more general knowledge, but for aider/coding
+workflows, the 32B Coder's specialized training and larger context window provide
+better results in practice.
+
+**Want the 72B model anyway?** Just uncomment the 72B model line in the preset:
+```bash
+# In rtx6000-2gpu.env:
+# MODEL_ID=Qwen/Qwen2.5-Coder-32B-Instruct  # Comment this
+MODEL_ID=Qwen/Qwen2.5-72B-Instruct-AWQ      # Uncomment this
+```
 
 ### Quantization Types
 
